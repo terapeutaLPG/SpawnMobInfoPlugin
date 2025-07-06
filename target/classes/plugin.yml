@@ -14,6 +14,10 @@ commands:
     description: Reload plugin configuration
     usage: /blazekillsreload
     permission: blazekilltracker.reload
+  blazekill:
+    description: Toggle spawn egg alerts
+    usage: /blazekill <active|deactive>
+    permission: blazekilltracker.alerts
 
 permissions:
   blazekilltracker.view:
@@ -21,4 +25,7 @@ permissions:
     default: true
   blazekilltracker.reload:
     description: Allows reloading plugin configuration
+    default: op
+  blazekilltracker.alerts:
+    description: Allows toggling spawn egg alerts
     default: op
