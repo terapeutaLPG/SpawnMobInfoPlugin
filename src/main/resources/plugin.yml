@@ -1,8 +1,8 @@
 name: BlazeKillTracker
 version: 1.0
-author: YourName
+author: jaruso99
 main: com.yourname.blazekilltracker.BlazeKillTracker
-description: Plugin that tracks Blaze kills with player info, location and time
+description: Plugin that tracks Blaze kills and alerts about Blaze/Ghast spawn eggs
 api-version: 1.13
 
 commands:
@@ -15,8 +15,8 @@ commands:
     usage: /blazekillsreload
     permission: blazekilltracker.reload
   blazekill:
-    description: Toggle spawn egg alerts
-    usage: /blazekill <active|deactive>
+    description: Toggle spawn egg alerts for Blaze and Ghast
+    usage: /blazekill <active|deactive|help>
     permission: blazekilltracker.alerts
 
 permissions:
@@ -27,5 +27,5 @@ permissions:
     description: Allows reloading plugin configuration
     default: op
   blazekilltracker.alerts:
-    description: Allows toggling spawn egg alerts
+    description: Allows toggling spawn egg alerts for Blaze and Ghast
     default: op

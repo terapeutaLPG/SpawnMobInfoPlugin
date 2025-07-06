@@ -1,24 +1,34 @@
+<<<<<<< HEAD
+
 ## NAPRAWIONE KOMENDY! 🎉
 
 ### ✅ Co zostało naprawione:
+
 - **Tab completion** - Komendy się teraz autouzupełniają
 - **Komenda help** - Dodano `/blazekill help`
 - **Lepsze komunikaty** - Czytelniejsze wiadomości w grze
 - **Stabilność** - Poprawiono błędy w kodzie
 
 ### 🎯 Nowe komendy:
-- `/blazekill active` - Włącza alerty o spawn eggs  
-- `/blazekill deactive` - Wyłącza alerty o spawn eggs  
-- `/blazekill help` - Wyświetla pomoc  
+
+- `/blazekill active` - Włącza alerty o spawn eggs
+- `/blazekill deactive` - Wyłącza alerty o spawn eggs
+- `/blazekill help` - Wyświetla pomoc
 
 ### 🔧 Tab completion:
+
 - Naciśnij **TAB** po `/blazekill` aby zobaczyć opcje
 - Naciśnij **TAB** po `/blazekills` aby zobaczyć graczy online
 
 ### 📋 Nowy plik do instalacji:
+
 `BlazeKillTracker-FIXED.jar` - Najnowsza wersja z poprawionymi komendami
 
 ---
+
+=======
+
+> > > > > > > f686674729b8df65d431a2422e75d9853d6b4f49
 
 # NOWE FUNKCJE! 🎉
 
@@ -63,8 +73,12 @@ Plugin został naprawiony! Główne problemy i ich rozwiązania:
 
 ### Krok 1: Skopiuj plik JAR
 
-1. Znajdź plik: `BlazeKillTracker-FIXED.jar` w folderze `c:\Users\igorf\Desktop\PLuginymc\`
-2. Skopiuj ten plik do folderu `plugins` na twoim serwerze Minecraft
+<<<<<<< HEAD
+
+1. # Znajdź plik: `BlazeKillTracker-FIXED.jar` w folderze `c:\Users\igorf\Desktop\PLuginymc\`
+1. Znajdź plik: `BlazeKillTracker-NEW.jar` w folderze `c:\Users\igorf\Desktop\PLuginymc\`
+   > > > > > > > f686674729b8df65d431a2422e75d9853d6b4f49
+1. Skopiuj ten plik do folderu `plugins` na twoim serwerze Minecraft
 
 ### Krok 2: Zrestartuj serwer
 
@@ -93,12 +107,16 @@ Plugin został naprawiony! Główne problemy i ich rozwiązania:
 ### NOWE! Komendy alertów:
 
 - `/blazekill active` - Włącza alerty o spawn eggs
-- `/blazekill deactive` - Wyłącza alerty o spawn eggs  
+  <<<<<<< HEAD
+- `/blazekill deactive` - Wyłącza alerty o spawn eggs
 - `/blazekill help` - Wyświetla pomoc o komendach
 
 ### 🔧 Tab completion:
+
 - Naciśnij **TAB** po wpisaniu `/blazekill` aby zobaczyć dostępne opcje
-- Naciśnij **TAB** po wpisaniu `/blazekills` aby zobaczyć graczy online
+- # Naciśnij **TAB** po wpisaniu `/blazekills` aby zobaczyć graczy online
+- `/blazekill deactive` - Wyłącza alerty o spawn eggs
+  > > > > > > > f686674729b8df65d431a2422e75d9853d6b4f49
 
 ## Uprawnienia
 

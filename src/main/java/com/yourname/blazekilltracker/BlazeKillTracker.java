@@ -261,12 +261,14 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
     private void showBlazeKillHelp(Player player) {
         player.sendMessage(ChatColor.GOLD + "=== BlazeKill Help ===");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill active" + ChatColor.WHITE + " - Włącza alerty o spawn eggs");
+        player.sendMessage(ChatColor.AQUA + "Plugin by jaruso99");
+        player.sendMessage(ChatColor.YELLOW + "/blazekill active" + ChatColor.WHITE + " - Włącza alerty o spawn eggs (Blaze + Ghast)");
         player.sendMessage(ChatColor.YELLOW + "/blazekill deactive" + ChatColor.WHITE + " - Wyłącza alerty o spawn eggs");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
                 ? ChatColor.GREEN + "WŁĄCZONE" : ChatColor.RED + "WYŁĄCZONE"));
+        player.sendMessage(ChatColor.GRAY + "Monitorowane moby: " + ChatColor.AQUA + "Blaze, Ghast");
     }
 
     private List<BlazeKillRecord> loadKillRecords() throws IOException {
@@ -303,13 +305,14 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             return;
         }
 
-        // Check if player is using spawn eggs
-        if (item.getType().name().contains("SPAWN_EGG")) {
+        // Check if player is using Blaze or Ghast spawn eggs only
+        String itemType = item.getType().name();
+        if (itemType.equals("BLAZE_SPAWN_EGG") || itemType.equals("GHAST_SPAWN_EGG")) {
             Location location = player.getLocation();
             LocalDateTime now = LocalDateTime.now();
 
             // Notify all operators
-            notifyOperators(player, item.getType().name(), location, now);
+            notifyOperators(player, itemType, location, now);
         }
     }
 
@@ -352,10 +355,19 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
     // Utility methods
     private void notifyOperators(Player spawner, String eggType, Location location, LocalDateTime time) {
+        // Convert egg type to readable mob name
+        String mobName = "";
+        if (eggType.equals("BLAZE_SPAWN_EGG")) {
+            mobName = "Blaze";
+        } else if (eggType.equals("GHAST_SPAWN_EGG")) {
+            mobName = "Ghast";
+        }
+
         String message = ChatColor.RED + "[SPAWN ALERT] " + ChatColor.YELLOW + spawner.getName()
-                + ChatColor.WHITE + " użył " + ChatColor.AQUA + eggType
+                + ChatColor.WHITE + " zespawnował " + ChatColor.AQUA + mobName
                 + ChatColor.WHITE + " w " + ChatColor.GREEN + location.getWorld().getName()
-                + " (" + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ() + ")";
+                + " (" + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ() + ")"
+                + ChatColor.GRAY + " - Kliknij aby się tp!";
 
         // Create clickable message for teleport
         TextComponent clickableMessage = new TextComponent(message);
