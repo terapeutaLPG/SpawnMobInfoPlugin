@@ -14,3 +14,17 @@ date-format: "dd-MM-yyyy HH:mm:ss"
 
 # Czy logować zabójstwa do konsoli serwera
 log-kills-to-console: false
+
+# NOWE! Ustawienia alertów o spawn eggs
+spawn-alerts:
+  # Czy powiadomienia o spawn eggs są włączone globalnie
+  enabled: true
+
+  # Czy wysyłać klikalne wiadomości do teleportacji
+  clickable-teleport: true
+
+  # Czy domyślnie włączać alerty dla nowych operatorów
+  default-for-ops: true
+
+  # Format wiadomości o spawn eggs
+  message-format: "&c[SPAWN ALERT] &e{player} &fusył &b{egg} &fw &a{world} &f({x}, {y}, {z})"
