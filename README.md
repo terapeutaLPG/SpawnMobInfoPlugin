@@ -12,19 +12,25 @@ Plugin do Minecraft który śledzi kto zabija moby Blaze, zapisując nick gracza
 ## Komendy
 
 ### `/blazekills`
+
 Wyświetla ogólne statystyki zabójstw Blaze
+
 - Pokazuje całkowitą liczbę zabójstw
 - Wyświetla ranking najlepszych graczy
 - **Uprawnienie**: `blazekilltracker.view`
 
 ### `/blazekills <nick_gracza>`
+
 Wyświetla szczegółowe statystyki dla konkretnego gracza
+
 - Pokazuje wszystkie zabójstwa Blaze danego gracza
 - Wyświetla czas, świat i lokalizację każdego zabójstwa
 - **Uprawnienie**: `blazekilltracker.view`
 
 ### `/blazekillsreload`
+
 Przeładowuje konfigurację pluginu
+
 - **Uprawnienie**: `blazekilltracker.reload`
 
 ## Uprawnienia
@@ -41,11 +47,13 @@ Przeładowuje konfigurację pluginu
 ## Format danych
 
 Dane są zapisywane w pliku `blaze_kills.txt` w formacie:
+
 ```
 nick_gracza;uuid_gracza;świat;x;y;z;data_czas
 ```
 
 Przykład:
+
 ```
 Steve;f47ac10b-58cc-4372-a567-0e02b2c3d479;world;123;64;456;06-07-2025 14:30:25
 ```
@@ -59,6 +67,7 @@ Steve;f47ac10b-58cc-4372-a567-0e02b2c3d479;world;123;64;456;06-07-2025 14:30:25
 ## Budowanie
 
 Użyj Maven do zbudowania pluginu:
+
 ```bash
 mvn clean package
 ```
