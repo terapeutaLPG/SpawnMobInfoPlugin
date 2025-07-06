@@ -1,0 +1,16 @@
+# Konfiguracja pluginu BlazeKillTracker
+
+# Czy powiadomienia o zabójstwach mają być wysyłane do gracza
+notify-player-on-kill: true
+
+# Czy zapisywać współrzędne dokładne czy zaokrąglone do bloków
+use-block-coordinates: true
+
+# Maksymalna liczba rekordów wyświetlanych w rankingu
+max-top-players: 10
+
+# Format daty i czasu (Java DateTimeFormatter)
+date-format: "dd-MM-yyyy HH:mm:ss"
+
+# Czy logować zabójstwa do konsoli serwera
+log-kills-to-console: false

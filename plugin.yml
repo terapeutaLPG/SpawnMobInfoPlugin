@@ -1,0 +1,24 @@
+name: BlazeKillTracker
+version: 1.0
+author: YourName
+main: com.yourname.blazekilltracker.BlazeKillTracker
+description: Plugin that tracks Blaze kills with player info, location and time
+api-version: 1.13
+
+commands:
+  blazekills:
+    description: View Blaze kill statistics
+    usage: /blazekills [player]
+    permission: blazekilltracker.view
+  blazekillsreload:
+    description: Reload plugin configuration
+    usage: /blazekillsreload
+    permission: blazekilltracker.reload
+
+permissions:
+  blazekilltracker.view:
+    description: Allows viewing Blaze kill statistics
+    default: true
+  blazekilltracker.reload:
+    description: Allows reloading plugin configuration
+    default: op
