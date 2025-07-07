@@ -30,6 +30,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.ItemSpawnEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -766,7 +769,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     }
 
     private ItemStack createMobLogItem() {
-        ItemStack item = new ItemStack(Material.DIAMOND_SHOVEL);
+        ItemStack item = new ItemStack(Material.STONE_SHOVEL);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.GOLD + "MobLog");
@@ -775,6 +778,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             lore.add(ChatColor.GRAY + "Kliknij na moba aby sprawdzić");
             lore.add(ChatColor.GRAY + "kto go zespawnował i kiedy");
             lore.add(ChatColor.BLUE + "Plugin by jaruso99");
+            lore.add(ChatColor.RED + "Automatycznie znika po wyrzuceniu!");
             meta.setLore(lore);
             item.setItemMeta(meta);
         }
@@ -851,6 +855,76 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
         public int getZ() {
             return z;
+        }
+    }
+
+    // Helper method to check if item is MobLog
+    private boolean isMobLogItem(ItemStack item) {
+        if (item == null || item.getType() != Material.STONE_SHOVEL) {
+            return false;
+        }
+
+        if (!item.hasItemMeta() || item.getItemMeta() == null) {
+            return false;
+        }
+
+        ItemMeta meta = item.getItemMeta();
+        if (!meta.hasDisplayName() || !meta.getDisplayName().equals(ChatColor.GOLD + "MobLog")) {
+            return false;
+        }
+
+        // Check for Luck enchantment as additional verification
+        if (!meta.hasEnchant(Enchantment.LUCK) || meta.getEnchantLevel(Enchantment.LUCK) != 1) {
+            return false;
+        }
+
+        return true;
+    }
+
+    @EventHandler
+    public void onPlayerDropItem(PlayerDropItemEvent event) {
+        ItemStack droppedItem = event.getItemDrop().getItemStack();
+
+        // Check if dropped item is MobLog
+        if (isMobLogItem(droppedItem)) {
+            // Remove the dropped item immediately
+            event.getItemDrop().remove();
+
+            Player player = event.getPlayer();
+            player.sendMessage(ChatColor.YELLOW + "Łopata MobLog zniknęła po wyrzuceniu!");
+            player.sendMessage(ChatColor.GRAY + "Użyj /blazekill logitem aby otrzymać nową");
+        }
+    }
+
+    @EventHandler
+    public void onItemSpawn(ItemSpawnEvent event) {
+        ItemStack item = event.getEntity().getItemStack();
+
+        // Check if spawned item is MobLog and remove it
+        if (isMobLogItem(item)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onEntityPickupItem(EntityPickupItemEvent event) {
+        // Check if the entity is a player
+        if (!(event.getEntity() instanceof Player)) {
+            return;
+        }
+
+        Player player = (Player) event.getEntity();
+        ItemStack item = event.getItem().getItemStack();
+
+        // Check if picked up item is MobLog and prevent pickup
+        if (isMobLogItem(item)) {
+            event.setCancelled(true);
+
+            // Remove the item from ground
+            event.getItem().remove();
+
+            player.sendMessage(ChatColor.RED + "Nie możesz podnieść łopaty MobLog!");
+            player.sendMessage(ChatColor.GRAY + "Użyj /blazekill logitem aby otrzymać nową");
         }
     }
 
