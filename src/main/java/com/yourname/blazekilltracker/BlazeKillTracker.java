@@ -25,11 +25,10 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import net.md_5.bungee.api.chat.ClickEvent;
@@ -40,6 +39,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     private File dataFolder;
     private File blazeKillsFile;
     private File alertsConfigFile;
+    private File spawnHistoryFile;
     private DateTimeFormatter dateFormat;
     private final Map<UUID, Boolean> playerAlerts = new HashMap<>();
 
@@ -67,6 +67,16 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 alertsConfigFile.createNewFile();
             } catch (IOException e) {
                 getLogger().severe("Could not create alerts config file!");
+                e.printStackTrace();
+            }
+        }
+
+        this.spawnHistoryFile = new File(dataFolder, "spawn_history.txt");
+        if (!spawnHistoryFile.exists()) {
+            try {
+                spawnHistoryFile.createNewFile();
+            } catch (IOException e) {
+                getLogger().severe("Could not create spawn history file!");
                 e.printStackTrace();
             }
         }
@@ -250,6 +260,8 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 player.sendMessage(ChatColor.RED + "Alerty o spawn eggs zostały WYŁĄCZONE!");
                 saveAlertsConfig();
                 return true;
+            case "hist":
+                return handleSpawnHistoryCommand(player, args);
             case "help":
                 showBlazeKillHelp(player);
                 return true;
@@ -264,6 +276,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         player.sendMessage(ChatColor.AQUA + "Plugin by jaruso99");
         player.sendMessage(ChatColor.YELLOW + "/blazekill active" + ChatColor.WHITE + " - Włącza alerty o spawn eggs (Blaze + Ghast)");
         player.sendMessage(ChatColor.YELLOW + "/blazekill deactive" + ChatColor.WHITE + " - Wyłącza alerty o spawn eggs");
+        player.sendMessage(ChatColor.YELLOW + "/blazekill hist <gracz>" + ChatColor.WHITE + " - Historia respawnów gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
@@ -295,24 +308,32 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         return records;
     }
 
-    // Event handlers for spawn eggs
+    // Event handlers for mob spawning
     @EventHandler
-    public void onPlayerInteract(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
-        ItemStack item = event.getItem();
+    public void onCreatureSpawn(CreatureSpawnEvent event) {
+        // Check if it's Blaze or Ghast spawned by spawn egg
+        if ((event.getEntityType() == EntityType.BLAZE || event.getEntityType() == EntityType.GHAST)
+                && event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.SPAWNER_EGG) {
 
-        if (item == null) {
-            return;
-        }
-
-        // Check if player is using Blaze or Ghast spawn eggs only
-        String itemType = item.getType().name();
-        if (itemType.equals("BLAZE_SPAWN_EGG") || itemType.equals("GHAST_SPAWN_EGG")) {
-            Location location = player.getLocation();
+            Location location = event.getLocation();
             LocalDateTime now = LocalDateTime.now();
 
-            // Notify all operators
-            notifyOperators(player, itemType, location, now);
+            // Find nearby players (within 5 blocks) to determine who spawned it
+            Player spawner = null;
+            for (Player player : location.getWorld().getPlayers()) {
+                if (player.getLocation().distance(location) <= 5.0) {
+                    spawner = player;
+                    break;
+                }
+            }
+
+            if (spawner != null) {
+                // Save spawn record
+                saveSpawnRecord(spawner, event.getEntityType().name(), location, now);
+
+                // Notify operators
+                notifyOperators(spawner, event.getEntityType().name(), location, now);
+            }
         }
     }
 
@@ -336,9 +357,15 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("blazekill")) {
             if (args.length == 1) {
-                return Arrays.asList("active", "deactive", "help")
+                return Arrays.asList("active", "deactive", "hist", "help")
                         .stream()
                         .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
+                        .collect(Collectors.toList());
+            } else if (args.length == 2 && args[0].equalsIgnoreCase("hist")) {
+                // Return list of online players for hist command
+                return getServer().getOnlinePlayers().stream()
+                        .map(Player::getName)
+                        .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
                         .collect(Collectors.toList());
             }
         } else if (command.getName().equalsIgnoreCase("blazekills")) {
@@ -354,12 +381,12 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     }
 
     // Utility methods
-    private void notifyOperators(Player spawner, String eggType, Location location, LocalDateTime time) {
-        // Convert egg type to readable mob name
+    private void notifyOperators(Player spawner, String mobType, Location location, LocalDateTime time) {
+        // Convert mob type to readable mob name
         String mobName = "";
-        if (eggType.equals("BLAZE_SPAWN_EGG")) {
+        if (mobType.equals("BLAZE")) {
             mobName = "Blaze";
-        } else if (eggType.equals("GHAST_SPAWN_EGG")) {
+        } else if (mobType.equals("GHAST")) {
             mobName = "Ghast";
         }
 
@@ -410,6 +437,90 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         } catch (IOException e) {
             getLogger().severe("Could not save alerts configuration!");
         }
+    }
+
+    // Spawn history methods
+    private boolean handleSpawnHistoryCommand(Player player, String[] args) {
+        if (args.length < 2) {
+            player.sendMessage(ChatColor.RED + "Użycie: /blazekill hist <gracz>");
+            return true;
+        }
+
+        String targetPlayer = args[1];
+
+        try {
+            List<SpawnRecord> records = loadSpawnRecords();
+            List<SpawnRecord> playerRecords = records.stream()
+                    .filter(record -> record.getPlayerName().equalsIgnoreCase(targetPlayer))
+                    .collect(Collectors.toList());
+
+            if (playerRecords.isEmpty()) {
+                player.sendMessage(ChatColor.YELLOW + "Brak historii respawnów dla gracza: " + targetPlayer);
+                return true;
+            }
+
+            player.sendMessage(ChatColor.GOLD + "=== Historia respawnów dla " + targetPlayer + " ===");
+            for (SpawnRecord record : playerRecords) {
+                String mobName = record.getMobType().equals("BLAZE") ? "Blaze" : "Ghast";
+                player.sendMessage(ChatColor.WHITE + "Mob: " + ChatColor.AQUA + mobName);
+                player.sendMessage(ChatColor.WHITE + "Czas: " + ChatColor.YELLOW + record.getTimestamp());
+                player.sendMessage(ChatColor.WHITE + "Świat: " + ChatColor.AQUA + record.getWorld());
+                player.sendMessage(ChatColor.WHITE + "Lokalizacja: " + ChatColor.GREEN
+                        + record.getX() + ", " + record.getY() + ", " + record.getZ());
+                player.sendMessage(ChatColor.GRAY + "---");
+            }
+            player.sendMessage(ChatColor.GOLD + "Łącznie respawnów: " + playerRecords.size());
+
+        } catch (IOException e) {
+            player.sendMessage(ChatColor.RED + "Błąd podczas odczytu historii!");
+            getLogger().severe("Error reading spawn history: " + e.getMessage());
+        }
+
+        return true;
+    }
+
+    private void saveSpawnRecord(Player spawner, String mobType, Location location, LocalDateTime time) {
+        SpawnRecord record = new SpawnRecord(
+                spawner.getName(),
+                spawner.getUniqueId().toString(),
+                mobType,
+                location.getWorld().getName(),
+                location.getBlockX(),
+                location.getBlockY(),
+                location.getBlockZ(),
+                time.format(dateFormat)
+        );
+
+        try (PrintWriter writer = new PrintWriter(new FileWriter(spawnHistoryFile, true))) {
+            writer.println(record.toString());
+        } catch (IOException e) {
+            getLogger().severe("Could not save spawn record!");
+            e.printStackTrace();
+        }
+    }
+
+    private List<SpawnRecord> loadSpawnRecords() throws IOException {
+        List<SpawnRecord> records = new ArrayList<>();
+
+        if (!spawnHistoryFile.exists()) {
+            return records;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(spawnHistoryFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                try {
+                    SpawnRecord record = SpawnRecord.fromString(line);
+                    if (record != null) {
+                        records.add(record);
+                    }
+                } catch (Exception e) {
+                    getLogger().warning("Could not parse spawn record: " + line);
+                }
+            }
+        }
+
+        return records;
     }
 
     // Inner class to represent a Blaze kill record
@@ -481,6 +592,89 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                         Integer.parseInt(parts[4]), // y
                         Integer.parseInt(parts[5]), // z
                         parts[6] // timestamp
+                );
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+    }
+
+    // Inner class to represent a spawn record
+    public static class SpawnRecord {
+
+        private final String playerName;
+        private final String playerUuid;
+        private final String mobType;
+        private final String world;
+        private final int x, y, z;
+        private final String timestamp;
+
+        public SpawnRecord(String playerName, String playerUuid, String mobType, String world,
+                int x, int y, int z, String timestamp) {
+            this.playerName = playerName;
+            this.playerUuid = playerUuid;
+            this.mobType = mobType;
+            this.world = world;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.timestamp = timestamp;
+        }
+
+        public String getPlayerName() {
+            return playerName;
+        }
+
+        public String getPlayerUuid() {
+            return playerUuid;
+        }
+
+        public String getMobType() {
+            return mobType;
+        }
+
+        public String getWorld() {
+            return world;
+        }
+
+        public int getX() {
+            return x;
+        }
+
+        public int getY() {
+            return y;
+        }
+
+        public int getZ() {
+            return z;
+        }
+
+        public String getTimestamp() {
+            return timestamp;
+        }
+
+        @Override
+        public String toString() {
+            return String.join(";", playerName, playerUuid, mobType, world,
+                    String.valueOf(x), String.valueOf(y), String.valueOf(z), timestamp);
+        }
+
+        public static SpawnRecord fromString(String line) {
+            String[] parts = line.split(";");
+            if (parts.length != 8) {
+                return null;
+            }
+
+            try {
+                return new SpawnRecord(
+                        parts[0], // playerName
+                        parts[1], // playerUuid
+                        parts[2], // mobType
+                        parts[3], // world
+                        Integer.parseInt(parts[4]), // x
+                        Integer.parseInt(parts[5]), // y
+                        Integer.parseInt(parts[6]), // z
+                        parts[7] // timestamp
                 );
             } catch (NumberFormatException e) {
                 return null;
