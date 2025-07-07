@@ -3,12 +3,14 @@
 ## ✅ Co zostało dodane i poprawione:
 
 ### 🆕 **Komenda `/blazekill lastspawn`**
+
 - ✅ **Pokazuje ostatnich 4 graczy** którzy zespawnowali moby
 - ✅ **Szczegółowe informacje**: typ moba, czas, miejsce respawnu
 - ✅ **Posortowane** od najnowszych do najstarszych
 - ✅ **Czytelny format** z numeracją
 
 ### 🔇 **Usunięto niepotrzebne powiadomienia**
+
 - ❌ **Usunięto** komunikat "Blaze kill recorded!" przy zabiciu Blaze
 - ✅ **Ciszej działanie** - plugin nie spamuje czatu
 
@@ -17,11 +19,13 @@
 ## 🎮 Komenda `/blazekill lastspawn`:
 
 ### Jak używać:
+
 ```
 /blazekill lastspawn
 ```
 
 ### Przykład wyniku:
+
 ```
 === Ostatnie respawny mobów ===
 Ostatnich 4 graczy którzy zespawnowali moby:
@@ -65,15 +69,18 @@ Ostatnich 4 graczy którzy zespawnowali moby:
 ## 🔧 Co zostało poprawione:
 
 ### 1. **Brak spamu w chacie**
+
 - Plugin nie wysyła już powiadomień o zabiciu Blaze
 - Ciche zapisywanie zabójstw w tle
 
 ### 2. **Nowa komenda lastspawn**
+
 - Szybki przegląd aktywności respawnów
 - Informacje o ostatnich graczach
 - Posortowane chronologicznie
 
 ### 3. **Lepszy help**
+
 - Dodano informację o nowej komendzie
 - Zaktualizowany opis w plugin.yml
 
@@ -107,6 +114,7 @@ Znajdziesz go w: `c:\Users\igorf\Desktop\PLuginymc\SpawnMobInfoPlugin\target\bla
 ## 📝 Zapisywane dane:
 
 Plugin tworzy automatycznie:
+
 - `plugins/BlazeKillTracker/blaze_kills.txt` - Zabójstwa Blaze (bez powiadomień)
 - `plugins/BlazeKillTracker/spawn_history.txt` - Historia respawnów
 - `plugins/BlazeKillTracker/alerts_config.txt` - Ustawienia alertów
@@ -115,7 +123,8 @@ Plugin tworzy automatycznie:
 
 ## 🎉 Autor: jaruso99
 
-**Najnowsza aktualizacja gotowa!** 
+**Najnowsza aktualizacja gotowa!**
+
 - ✅ Komenda `/blazekill lastspawn` - przegląd ostatnich respawnów
 - ✅ Usunięto spam o zabiciach Blaze
 - ✅ Lepszy UX - mniej komunikatów, więcej informacji
