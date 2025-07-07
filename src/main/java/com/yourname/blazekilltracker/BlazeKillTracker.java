@@ -50,6 +50,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     private File blazeKillsFile;
     private File alertsConfigFile;
     private File spawnHistoryFile;
+    private File mobSpawnInfoFile;
     private DateTimeFormatter dateFormat;
     private final Map<UUID, Boolean> playerAlerts = new HashMap<>();
     private final Map<UUID, SpawnInfo> mobSpawnInfo = new HashMap<>();
@@ -92,8 +93,21 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             }
         }
 
+        this.mobSpawnInfoFile = new File(dataFolder, "mob_spawn_info.txt");
+        if (!mobSpawnInfoFile.exists()) {
+            try {
+                mobSpawnInfoFile.createNewFile();
+            } catch (IOException e) {
+                getLogger().severe("Could not create mob spawn info file!");
+                e.printStackTrace();
+            }
+        }
+
         // Load alerts configuration
         loadAlertsConfig();
+
+        // Load mob spawn info from file
+        loadMobSpawnInfo();
 
         this.dateFormat = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
 
@@ -113,6 +127,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     @Override
     public void onDisable() {
         saveAlertsConfig();
+        saveMobSpawnInfo();
         getLogger().info("BlazeKillTracker has been disabled!");
     }
 
@@ -358,6 +373,9 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                         location.getBlockZ()
                 );
                 mobSpawnInfo.put(event.getEntity().getUniqueId(), spawnInfo);
+
+                // Save mob spawn info to file immediately
+                saveMobSpawnInfo();
 
                 // Only send alerts for Blaze and Ghast
                 if (event.getEntityType() == EntityType.BLAZE || event.getEntityType() == EntityType.GHAST) {
@@ -863,6 +881,30 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         public int getZ() {
             return z;
         }
+
+        @Override
+        public String toString() {
+            return spawnerName + ";" + spawnerUuid + ";" + spawnTime + ";" + x + ";" + y + ";" + z;
+        }
+
+        public static SpawnInfo fromString(String line) {
+            try {
+                String[] parts = line.split(";");
+                if (parts.length == 6) {
+                    return new SpawnInfo(
+                            parts[0], // spawnerName
+                            parts[1], // spawnerUuid
+                            parts[2], // spawnTime
+                            Integer.parseInt(parts[3]), // x
+                            Integer.parseInt(parts[4]), // y
+                            Integer.parseInt(parts[5]) // z
+                    );
+                }
+            } catch (Exception e) {
+                // Return null if parsing fails
+            }
+            return null;
+        }
     }
 
     // Helper method to check if item is MobLog
@@ -955,6 +997,9 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         // Clean up spawn history
         cleanupSpawnHistory(cutoffDate);
 
+        // Clean up mob spawn info
+        cleanupMobSpawnInfo(cutoffDate);
+
         getLogger().info("Log cleanup completed - removed entries older than 21 days");
     }
 
@@ -1018,6 +1063,35 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         }
     }
 
+    private void cleanupMobSpawnInfo(LocalDateTime cutoffDate) {
+        try {
+            Map<UUID, SpawnInfo> filteredSpawnInfo = new HashMap<>();
+
+            for (Map.Entry<UUID, SpawnInfo> entry : mobSpawnInfo.entrySet()) {
+                try {
+                    LocalDateTime spawnTime = LocalDateTime.parse(entry.getValue().getSpawnTime(), dateFormat);
+                    if (spawnTime.isAfter(cutoffDate)) {
+                        filteredSpawnInfo.put(entry.getKey(), entry.getValue());
+                    }
+                } catch (Exception e) {
+                    // Keep entries with invalid dates
+                    filteredSpawnInfo.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            int removedCount = mobSpawnInfo.size() - filteredSpawnInfo.size();
+            mobSpawnInfo.clear();
+            mobSpawnInfo.putAll(filteredSpawnInfo);
+
+            // Save cleaned up data
+            saveMobSpawnInfo();
+
+            getLogger().info("Cleaned up " + removedCount + " old mob spawn info records");
+        } catch (Exception e) {
+            getLogger().severe("Error during mob spawn info cleanup: " + e.getMessage());
+        }
+    }
+
     private boolean handleTeleportCommand(Player player, String[] args) {
         if (args.length < 2) {
             player.sendMessage(ChatColor.RED + "Użycie: /blazekill tp <gracz>");
@@ -1067,6 +1141,45 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             player.sendMessage(ChatColor.RED + "Błąd podczas odczytu historii spawnu!");
             getLogger().severe("Error reading spawn history for teleport command: " + e.getMessage());
             return true;
+        }
+    }
+
+    // Mob spawn info management methods
+    private void saveMobSpawnInfo() {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(mobSpawnInfoFile))) {
+            for (Map.Entry<UUID, SpawnInfo> entry : mobSpawnInfo.entrySet()) {
+                writer.println(entry.getKey().toString() + ";" + entry.getValue().toString());
+            }
+        } catch (IOException e) {
+            getLogger().severe("Error saving mob spawn info: " + e.getMessage());
+        }
+    }
+
+    private void loadMobSpawnInfo() {
+        mobSpawnInfo.clear();
+
+        if (!mobSpawnInfoFile.exists()) {
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(mobSpawnInfoFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                try {
+                    String[] parts = line.split(";", 2);
+                    if (parts.length == 2) {
+                        UUID mobUuid = UUID.fromString(parts[0]);
+                        SpawnInfo spawnInfo = SpawnInfo.fromString(parts[1]);
+                        if (spawnInfo != null) {
+                            mobSpawnInfo.put(mobUuid, spawnInfo);
+                        }
+                    }
+                } catch (Exception e) {
+                    getLogger().warning("Could not parse mob spawn info: " + line);
+                }
+            }
+        } catch (IOException e) {
+            getLogger().severe("Error loading mob spawn info: " + e.getMessage());
         }
     }
 
