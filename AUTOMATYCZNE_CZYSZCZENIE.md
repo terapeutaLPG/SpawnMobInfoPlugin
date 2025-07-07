@@ -35,11 +35,13 @@
 ```
 
 **Przykład:**
+
 ```
 /blazekill tp Player123
 ```
 
 **Wynik:**
+
 ```
 Teleportowano do ostatniego spawnu gracza Player123
 Mob: Blaze
@@ -95,12 +97,14 @@ Lokalizacja: world_nether (123, 64, 456)
 ```
 /blazekill hist Player123
 ```
-*(Sprawdza historię gracza)*
+
+_(Sprawdza historię gracza)_
 
 ```
 /blazekill tp Player123
 ```
-*(Teleportuje do ostatniego spawnu gracza)*
+
+_(Teleportuje do ostatniego spawnu gracza)_
 
 ### **Czyszczenie logów (automatyczne)**
 
@@ -119,17 +123,20 @@ Lokalizacja: world_nether (123, 64, 456)
 ```
 Nie znaleziono żadnych respawnów gracza Player123
 ```
-*(Gracz nie ma historii respawnów)*
+
+_(Gracz nie ma historii respawnów)_
 
 ```
 Świat world_nether nie istnieje!
 ```
-*(Świat został usunięty)*
+
+_(Świat został usunięty)_
 
 ```
 Użycie: /blazekill tp <gracz>
 ```
-*(Błędne użycie komendy)*
+
+_(Błędne użycie komendy)_
 
 ---
 
