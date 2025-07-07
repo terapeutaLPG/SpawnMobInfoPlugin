@@ -18,17 +18,23 @@ import java.util.stream.Collectors;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import net.md_5.bungee.api.chat.ClickEvent;
@@ -42,6 +48,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     private File spawnHistoryFile;
     private DateTimeFormatter dateFormat;
     private final Map<UUID, Boolean> playerAlerts = new HashMap<>();
+    private final Map<UUID, SpawnInfo> mobSpawnInfo = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -262,6 +269,8 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 return true;
             case "hist":
                 return handleSpawnHistoryCommand(player, args);
+            case "logitem":
+                return handleLogItemCommand(player);
             case "help":
                 showBlazeKillHelp(player);
                 return true;
@@ -277,6 +286,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         player.sendMessage(ChatColor.YELLOW + "/blazekill active" + ChatColor.WHITE + " - Włącza alerty o spawn eggs (Blaze + Ghast)");
         player.sendMessage(ChatColor.YELLOW + "/blazekill deactive" + ChatColor.WHITE + " - Wyłącza alerty o spawn eggs");
         player.sendMessage(ChatColor.YELLOW + "/blazekill hist <gracz>" + ChatColor.WHITE + " - Historia respawnów gracza");
+        player.sendMessage(ChatColor.YELLOW + "/blazekill logitem" + ChatColor.WHITE + " - Daje łopatę MobLog do sprawdzania spawnu");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
@@ -311,9 +321,8 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     // Event handlers for mob spawning
     @EventHandler
     public void onCreatureSpawn(CreatureSpawnEvent event) {
-        // Check if it's Blaze or Ghast spawned by spawn egg
-        if ((event.getEntityType() == EntityType.BLAZE || event.getEntityType() == EntityType.GHAST)
-                && event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.SPAWNER_EGG) {
+        // Check if it's spawned by spawn egg (any mob type)
+        if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.SPAWNER_EGG) {
 
             Location location = event.getLocation();
             LocalDateTime now = LocalDateTime.now();
@@ -328,11 +337,25 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             }
 
             if (spawner != null) {
-                // Save spawn record
-                saveSpawnRecord(spawner, event.getEntityType().name(), location, now);
+                // Save spawn info for MobLog
+                SpawnInfo spawnInfo = new SpawnInfo(
+                        spawner.getName(),
+                        spawner.getUniqueId().toString(),
+                        now.format(dateFormat),
+                        location.getBlockX(),
+                        location.getBlockY(),
+                        location.getBlockZ()
+                );
+                mobSpawnInfo.put(event.getEntity().getUniqueId(), spawnInfo);
 
-                // Notify operators
-                notifyOperators(spawner, event.getEntityType().name(), location, now);
+                // Only send alerts for Blaze and Ghast
+                if (event.getEntityType() == EntityType.BLAZE || event.getEntityType() == EntityType.GHAST) {
+                    // Save spawn record
+                    saveSpawnRecord(spawner, event.getEntityType().name(), location, now);
+
+                    // Notify operators
+                    notifyOperators(spawner, event.getEntityType().name(), location, now);
+                }
             }
         }
     }
@@ -357,7 +380,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("blazekill")) {
             if (args.length == 1) {
-                return Arrays.asList("active", "deactive", "hist", "help")
+                return Arrays.asList("active", "deactive", "hist", "logitem", "help")
                         .stream()
                         .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
@@ -681,4 +704,103 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             }
         }
     }
+
+    // MobLog item methods
+    private boolean handleLogItemCommand(Player player) {
+        ItemStack logItem = createMobLogItem();
+        player.getInventory().addItem(logItem);
+        player.sendMessage(ChatColor.GREEN + "Otrzymałeś łopatę MobLog!");
+        player.sendMessage(ChatColor.YELLOW + "Kliknij nią na moba aby sprawdzić kto go zespawnował!");
+        return true;
+    }
+
+    private ItemStack createMobLogItem() {
+        ItemStack item = new ItemStack(Material.DIAMOND_SHOVEL);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.GOLD + "MobLog");
+            meta.addEnchant(Enchantment.LUCK, 1, true);
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Kliknij na moba aby sprawdzić");
+            lore.add(ChatColor.GRAY + "kto go zespawnował i kiedy");
+            lore.add(ChatColor.BLUE + "Plugin by jaruso99");
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    @EventHandler
+    public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
+        Player player = event.getPlayer();
+        Entity entity = event.getRightClicked();
+        ItemStack item = player.getInventory().getItemInMainHand();
+
+        // Check if player is holding MobLog item
+        if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()
+                && item.getItemMeta().getDisplayName().equals(ChatColor.GOLD + "MobLog")) {
+
+            event.setCancelled(true);
+
+            // Check if entity has spawn info
+            UUID entityUUID = entity.getUniqueId();
+            if (mobSpawnInfo.containsKey(entityUUID)) {
+                SpawnInfo spawnInfo = mobSpawnInfo.get(entityUUID);
+
+                player.sendMessage(ChatColor.GOLD + "=== MobLog Info ===");
+                player.sendMessage(ChatColor.AQUA + "Typ moba: " + ChatColor.WHITE + entity.getType().name());
+                player.sendMessage(ChatColor.AQUA + "Zespawnowany przez: " + ChatColor.YELLOW + spawnInfo.getSpawnerName());
+                player.sendMessage(ChatColor.AQUA + "Czas spawnu: " + ChatColor.WHITE + spawnInfo.getSpawnTime());
+                player.sendMessage(ChatColor.AQUA + "Lokalizacja spawnu: " + ChatColor.GREEN
+                        + spawnInfo.getX() + ", " + spawnInfo.getY() + ", " + spawnInfo.getZ());
+
+            } else {
+                player.sendMessage(ChatColor.YELLOW + "Brak informacji o spawnie tego moba");
+                player.sendMessage(ChatColor.GRAY + "Mob mógł zostać zespawnowany naturalnie lub przed uruchomieniem pluginu");
+            }
+        }
+    }
+
+    // Inner class to represent spawn information
+    public static class SpawnInfo {
+
+        private final String spawnerName;
+        private final String spawnerUuid;
+        private final String spawnTime;
+        private final int x, y, z;
+
+        public SpawnInfo(String spawnerName, String spawnerUuid, String spawnTime, int x, int y, int z) {
+            this.spawnerName = spawnerName;
+            this.spawnerUuid = spawnerUuid;
+            this.spawnTime = spawnTime;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        public String getSpawnerName() {
+            return spawnerName;
+        }
+
+        public String getSpawnerUuid() {
+            return spawnerUuid;
+        }
+
+        public String getSpawnTime() {
+            return spawnTime;
+        }
+
+        public int getX() {
+            return x;
+        }
+
+        public int getY() {
+            return y;
+        }
+
+        public int getZ() {
+            return z;
+        }
+    }
+
 }

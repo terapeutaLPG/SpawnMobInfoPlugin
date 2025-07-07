@@ -15,8 +15,8 @@ commands:
     usage: /blazekillsreload
     permission: blazekilltracker.reload
   blazekill:
-    description: Toggle spawn egg alerts for Blaze and Ghast, view spawn history
-    usage: /blazekill <active|deactive|hist|help>
+    description: Toggle spawn egg alerts, view spawn history, get MobLog tool
+    usage: /blazekill <active|deactive|hist|logitem|help>
     permission: blazekilltracker.alerts
 
 permissions:
