@@ -139,9 +139,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         // Save to file
         saveKillRecord(record);
 
-        // Notify player
-        killer.sendMessage(ChatColor.GREEN + "Blaze kill recorded! Location: "
-                + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ());
+        // Removed notification - no longer needed
     }
 
     private void saveKillRecord(BlazeKillRecord record) {
@@ -271,6 +269,8 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 return handleSpawnHistoryCommand(player, args);
             case "logitem":
                 return handleLogItemCommand(player);
+            case "lastspawn":
+                return handleLastSpawnCommand(player);
             case "help":
                 showBlazeKillHelp(player);
                 return true;
@@ -287,6 +287,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         player.sendMessage(ChatColor.YELLOW + "/blazekill deactive" + ChatColor.WHITE + " - Wyłącza alerty o spawn eggs");
         player.sendMessage(ChatColor.YELLOW + "/blazekill hist <gracz>" + ChatColor.WHITE + " - Historia respawnów gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill logitem" + ChatColor.WHITE + " - Daje łopatę MobLog do sprawdzania spawnu");
+        player.sendMessage(ChatColor.YELLOW + "/blazekill lastspawn" + ChatColor.WHITE + " - Ostatnich 4 graczy którzy zespawnowali moby");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
@@ -380,7 +381,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("blazekill")) {
             if (args.length == 1) {
-                return Arrays.asList("active", "deactive", "hist", "logitem", "help")
+                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "help")
                         .stream()
                         .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
@@ -497,6 +498,56 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         } catch (IOException e) {
             player.sendMessage(ChatColor.RED + "Błąd podczas odczytu historii!");
             getLogger().severe("Error reading spawn history: " + e.getMessage());
+        }
+
+        return true;
+    }
+
+    private boolean handleLastSpawnCommand(Player player) {
+        try {
+            List<SpawnRecord> records = loadSpawnRecords();
+
+            if (records.isEmpty()) {
+                player.sendMessage(ChatColor.YELLOW + "Brak zapisanych respawnów mobów");
+                return true;
+            }
+
+            // Get last 4 unique players who spawned mobs
+            Map<String, SpawnRecord> lastSpawns = new HashMap<>();
+
+            // Reverse iterate to get the most recent spawns first
+            for (int i = records.size() - 1; i >= 0 && lastSpawns.size() < 4; i--) {
+                SpawnRecord record = records.get(i);
+                if (!lastSpawns.containsKey(record.getPlayerName())) {
+                    lastSpawns.put(record.getPlayerName(), record);
+                }
+            }
+
+            player.sendMessage(ChatColor.GOLD + "=== Ostatnie respawny mobów ===");
+            player.sendMessage(ChatColor.GRAY + "Ostatnich " + lastSpawns.size() + " graczy którzy zespawnowali moby:");
+
+            // Sort by timestamp (newest first) and display
+            List<SpawnRecord> sortedRecords = lastSpawns.values().stream()
+                    .sorted((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
+                    .collect(Collectors.toList());
+
+            for (int i = 0; i < sortedRecords.size(); i++) {
+                SpawnRecord record = sortedRecords.get(i);
+                String mobName = record.getMobType().equals("BLAZE") ? "Blaze"
+                        : record.getMobType().equals("GHAST") ? "Ghast" : record.getMobType();
+
+                player.sendMessage(ChatColor.AQUA + String.valueOf(i + 1) + ". " + ChatColor.YELLOW + record.getPlayerName());
+                player.sendMessage("   " + ChatColor.WHITE + "Mob: " + ChatColor.GREEN + mobName);
+                player.sendMessage("   " + ChatColor.WHITE + "Czas: " + ChatColor.GRAY + record.getTimestamp());
+                player.sendMessage("   " + ChatColor.WHITE + "Miejsce: " + ChatColor.AQUA + record.getWorld()
+                        + " " + ChatColor.GREEN + "(" + record.getX() + ", " + record.getY() + ", " + record.getZ() + ")");
+            }
+
+            player.sendMessage(ChatColor.GRAY + "Łącznie respawnów: " + records.size());
+
+        } catch (IOException e) {
+            player.sendMessage(ChatColor.RED + "Błąd podczas odczytu historii respawnów!");
+            getLogger().severe("Error reading spawn history for lastspawn command: " + e.getMessage());
         }
 
         return true;
