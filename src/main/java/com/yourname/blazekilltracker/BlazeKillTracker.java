@@ -39,6 +39,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -102,6 +103,9 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         // Register tab completers
         getCommand("blazekill").setTabCompleter(this);
         getCommand("blazekills").setTabCompleter(this);
+
+        // Start automatic log cleanup task (runs every 24 hours)
+        startLogCleanupTask();
 
         getLogger().info("BlazeKillTracker has been enabled!");
     }
@@ -274,6 +278,8 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 return handleLogItemCommand(player);
             case "lastspawn":
                 return handleLastSpawnCommand(player);
+            case "tp":
+                return handleTeleportCommand(player, args);
             case "help":
                 showBlazeKillHelp(player);
                 return true;
@@ -291,6 +297,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         player.sendMessage(ChatColor.YELLOW + "/blazekill hist <gracz>" + ChatColor.WHITE + " - Historia respawnów gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill logitem" + ChatColor.WHITE + " - Daje łopatę MobLog do sprawdzania spawnu");
         player.sendMessage(ChatColor.YELLOW + "/blazekill lastspawn" + ChatColor.WHITE + " - Ostatnich 4 graczy którzy zespawnowali moby");
+        player.sendMessage(ChatColor.YELLOW + "/blazekill tp <gracz>" + ChatColor.WHITE + " - Teleportuje do ostatniego spawnu gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
@@ -384,12 +391,12 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("blazekill")) {
             if (args.length == 1) {
-                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "help")
+                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "help")
                         .stream()
                         .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
-            } else if (args.length == 2 && args[0].equalsIgnoreCase("hist")) {
-                // Return list of online players for hist command
+            } else if (args.length == 2 && (args[0].equalsIgnoreCase("hist") || args[0].equalsIgnoreCase("tp"))) {
+                // Return list of online players for hist and tp commands
                 return getServer().getOnlinePlayers().stream()
                         .map(Player::getName)
                         .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
@@ -925,6 +932,141 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
             player.sendMessage(ChatColor.RED + "Nie możesz podnieść łopaty MobLog!");
             player.sendMessage(ChatColor.GRAY + "Użyj /blazekill logitem aby otrzymać nową");
+        }
+    }
+
+    // Log cleanup and teleport functions
+    private void startLogCleanupTask() {
+        // Run cleanup task every 24 hours (20 ticks * 60 seconds * 60 minutes * 24 hours)
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                cleanupOldLogs();
+            }
+        }.runTaskTimer(this, 20L * 60L * 60L * 24L, 20L * 60L * 60L * 24L); // Run every 24 hours
+    }
+
+    private void cleanupOldLogs() {
+        LocalDateTime cutoffDate = LocalDateTime.now().minusDays(21);
+
+        // Clean up blaze kills
+        cleanupBlazeKills(cutoffDate);
+
+        // Clean up spawn history
+        cleanupSpawnHistory(cutoffDate);
+
+        getLogger().info("Log cleanup completed - removed entries older than 21 days");
+    }
+
+    private void cleanupBlazeKills(LocalDateTime cutoffDate) {
+        try {
+            List<BlazeKillRecord> records = loadKillRecords();
+            List<BlazeKillRecord> filteredRecords = new ArrayList<>();
+
+            for (BlazeKillRecord record : records) {
+                try {
+                    LocalDateTime recordDate = LocalDateTime.parse(record.timestamp, dateFormat);
+                    if (recordDate.isAfter(cutoffDate)) {
+                        filteredRecords.add(record);
+                    }
+                } catch (Exception e) {
+                    // Keep records with invalid dates
+                    filteredRecords.add(record);
+                }
+            }
+
+            // Rewrite file with filtered records
+            try (PrintWriter writer = new PrintWriter(new FileWriter(blazeKillsFile))) {
+                for (BlazeKillRecord record : filteredRecords) {
+                    writer.println(record.toString());
+                }
+            }
+
+            getLogger().info("Cleaned up " + (records.size() - filteredRecords.size()) + " old blaze kill records");
+        } catch (IOException e) {
+            getLogger().severe("Error during blaze kills cleanup: " + e.getMessage());
+        }
+    }
+
+    private void cleanupSpawnHistory(LocalDateTime cutoffDate) {
+        try {
+            List<SpawnRecord> records = loadSpawnRecords();
+            List<SpawnRecord> filteredRecords = new ArrayList<>();
+
+            for (SpawnRecord record : records) {
+                try {
+                    LocalDateTime recordDate = LocalDateTime.parse(record.timestamp, dateFormat);
+                    if (recordDate.isAfter(cutoffDate)) {
+                        filteredRecords.add(record);
+                    }
+                } catch (Exception e) {
+                    // Keep records with invalid dates
+                    filteredRecords.add(record);
+                }
+            }
+
+            // Rewrite file with filtered records
+            try (PrintWriter writer = new PrintWriter(new FileWriter(spawnHistoryFile))) {
+                for (SpawnRecord record : filteredRecords) {
+                    writer.println(record.toString());
+                }
+            }
+
+            getLogger().info("Cleaned up " + (records.size() - filteredRecords.size()) + " old spawn history records");
+        } catch (IOException e) {
+            getLogger().severe("Error during spawn history cleanup: " + e.getMessage());
+        }
+    }
+
+    private boolean handleTeleportCommand(Player player, String[] args) {
+        if (args.length < 2) {
+            player.sendMessage(ChatColor.RED + "Użycie: /blazekill tp <gracz>");
+            return true;
+        }
+
+        String targetPlayerName = args[1];
+
+        try {
+            List<SpawnRecord> records = loadSpawnRecords();
+            SpawnRecord lastSpawn = null;
+
+            // Find the most recent spawn by the target player
+            for (SpawnRecord record : records) {
+                if (record.playerName.equalsIgnoreCase(targetPlayerName)) {
+                    if (lastSpawn == null || record.timestamp.compareTo(lastSpawn.timestamp) > 0) {
+                        lastSpawn = record;
+                    }
+                }
+            }
+
+            if (lastSpawn == null) {
+                player.sendMessage(ChatColor.RED + "Nie znaleziono żadnych respawnów gracza " + targetPlayerName);
+                return true;
+            }
+
+            // Get the world and create location
+            org.bukkit.World world = getServer().getWorld(lastSpawn.world);
+            if (world == null) {
+                player.sendMessage(ChatColor.RED + "Świat " + lastSpawn.world + " nie istnieje!");
+                return true;
+            }
+
+            Location location = new Location(world, lastSpawn.x + 0.5, lastSpawn.y, lastSpawn.z + 0.5);
+
+            // Teleport player
+            player.teleport(location);
+
+            player.sendMessage(ChatColor.GREEN + "Teleportowano do ostatniego spawnu gracza " + targetPlayerName);
+            player.sendMessage(ChatColor.GRAY + "Mob: " + ChatColor.AQUA + lastSpawn.mobType);
+            player.sendMessage(ChatColor.GRAY + "Czas: " + ChatColor.YELLOW + lastSpawn.timestamp);
+            player.sendMessage(ChatColor.GRAY + "Lokalizacja: " + ChatColor.WHITE + world.getName()
+                    + " (" + lastSpawn.x + ", " + lastSpawn.y + ", " + lastSpawn.z + ")");
+
+            return true;
+        } catch (IOException e) {
+            player.sendMessage(ChatColor.RED + "Błąd podczas odczytu historii spawnu!");
+            getLogger().severe("Error reading spawn history for teleport command: " + e.getMessage());
+            return true;
         }
     }
 
