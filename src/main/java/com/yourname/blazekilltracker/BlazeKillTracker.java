@@ -30,9 +30,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.entity.EntityPickupItemEvent;
-import org.bukkit.event.entity.ItemSpawnEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -51,9 +48,11 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     private File alertsConfigFile;
     private File spawnHistoryFile;
     private File mobSpawnInfoFile;
+    private File mobNametagsFile;
     private DateTimeFormatter dateFormat;
     private final Map<UUID, Boolean> playerAlerts = new HashMap<>();
     private final Map<UUID, SpawnInfo> mobSpawnInfo = new HashMap<>();
+    private final Map<UUID, NametagInfo> mobNametags = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -103,11 +102,24 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             }
         }
 
+        this.mobNametagsFile = new File(dataFolder, "mob_nametags.txt");
+        if (!mobNametagsFile.exists()) {
+            try {
+                mobNametagsFile.createNewFile();
+            } catch (IOException e) {
+                getLogger().severe("Could not create mob nametags file!");
+                e.printStackTrace();
+            }
+        }
+
         // Load alerts configuration
         loadAlertsConfig();
 
         // Load mob spawn info from file
         loadMobSpawnInfo();
+
+        // Load mob nametags from file
+        loadMobNametags();
 
         this.dateFormat = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
 
@@ -128,6 +140,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public void onDisable() {
         saveAlertsConfig();
         saveMobSpawnInfo();
+        saveMobNametags();
         getLogger().info("BlazeKillTracker has been disabled!");
     }
 
@@ -811,6 +824,32 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     }
 
     @EventHandler
+    public void onPlayerInteractEntityForNametag(PlayerInteractEntityEvent event) {
+        Player player = event.getPlayer();
+        Entity entity = event.getRightClicked();
+        ItemStack item = player.getInventory().getItemInMainHand();
+
+        // Check if player is using name tag on entity
+        if (item != null && item.getType() == Material.NAME_TAG && item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+            String nametagText = item.getItemMeta().getDisplayName();
+            LocalDateTime now = LocalDateTime.now();
+
+            // Save nametag info
+            NametagInfo nametagInfo = new NametagInfo(
+                    player.getName(),
+                    player.getUniqueId().toString(),
+                    nametagText,
+                    now.format(dateFormat)
+            );
+
+            mobNametags.put(entity.getUniqueId(), nametagInfo);
+
+            // Save to file immediately
+            saveMobNametags();
+        }
+    }
+
+    @EventHandler
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
         Player player = event.getPlayer();
         Entity entity = event.getRightClicked();
@@ -834,9 +873,29 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 player.sendMessage(ChatColor.AQUA + "Lokalizacja spawnu: " + ChatColor.GREEN
                         + spawnInfo.getX() + ", " + spawnInfo.getY() + ", " + spawnInfo.getZ());
 
+                // Check for nametag info
+                if (mobNametags.containsKey(entityUUID)) {
+                    NametagInfo nametagInfo = mobNametags.get(entityUUID);
+                    player.sendMessage(ChatColor.LIGHT_PURPLE + "--- Nametag Info ---");
+                    player.sendMessage(ChatColor.LIGHT_PURPLE + "Nametag nadany przez: " + ChatColor.YELLOW + nametagInfo.getGiverName());
+                    player.sendMessage(ChatColor.LIGHT_PURPLE + "Tekst nametag'a: " + ChatColor.WHITE + "\"" + nametagInfo.getNametagText() + "\"");
+                    player.sendMessage(ChatColor.LIGHT_PURPLE + "Czas nadania: " + ChatColor.WHITE + nametagInfo.getGiveTime());
+                } else {
+                    player.sendMessage(ChatColor.GRAY + "Brak informacji o nametag'u");
+                }
+
             } else {
                 player.sendMessage(ChatColor.YELLOW + "Brak informacji o spawnie tego moba");
                 player.sendMessage(ChatColor.GRAY + "Mob mógł zostać zespawnowany naturalnie lub przed uruchomieniem pluginu");
+
+                // Still check for nametag info even if no spawn info
+                if (mobNametags.containsKey(entityUUID)) {
+                    NametagInfo nametagInfo = mobNametags.get(entityUUID);
+                    player.sendMessage(ChatColor.LIGHT_PURPLE + "--- Nametag Info ---");
+                    player.sendMessage(ChatColor.LIGHT_PURPLE + "Nametag nadany przez: " + ChatColor.YELLOW + nametagInfo.getGiverName());
+                    player.sendMessage(ChatColor.LIGHT_PURPLE + "Tekst nametag'a: " + ChatColor.WHITE + "\"" + nametagInfo.getNametagText() + "\"");
+                    player.sendMessage(ChatColor.LIGHT_PURPLE + "Czas nadania: " + ChatColor.WHITE + nametagInfo.getGiveTime());
+                }
             }
         }
     }
@@ -907,76 +966,6 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         }
     }
 
-    // Helper method to check if item is MobLog
-    private boolean isMobLogItem(ItemStack item) {
-        if (item == null || item.getType() != Material.STONE_SHOVEL) {
-            return false;
-        }
-
-        if (!item.hasItemMeta() || item.getItemMeta() == null) {
-            return false;
-        }
-
-        ItemMeta meta = item.getItemMeta();
-        if (!meta.hasDisplayName() || !meta.getDisplayName().equals(ChatColor.GOLD + "MobLog")) {
-            return false;
-        }
-
-        // Check for Luck enchantment as additional verification
-        if (!meta.hasEnchant(Enchantment.LUCK) || meta.getEnchantLevel(Enchantment.LUCK) != 1) {
-            return false;
-        }
-
-        return true;
-    }
-
-    @EventHandler
-    public void onPlayerDropItem(PlayerDropItemEvent event) {
-        ItemStack droppedItem = event.getItemDrop().getItemStack();
-
-        // Check if dropped item is MobLog
-        if (isMobLogItem(droppedItem)) {
-            // Remove the dropped item immediately
-            event.getItemDrop().remove();
-
-            Player player = event.getPlayer();
-            player.sendMessage(ChatColor.YELLOW + "Łopata MobLog zniknęła po wyrzuceniu!");
-            player.sendMessage(ChatColor.GRAY + "Użyj /blazekill logitem aby otrzymać nową");
-        }
-    }
-
-    @EventHandler
-    public void onItemSpawn(ItemSpawnEvent event) {
-        ItemStack item = event.getEntity().getItemStack();
-
-        // Check if spawned item is MobLog and remove it
-        if (isMobLogItem(item)) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler
-    public void onEntityPickupItem(EntityPickupItemEvent event) {
-        // Check if the entity is a player
-        if (!(event.getEntity() instanceof Player)) {
-            return;
-        }
-
-        Player player = (Player) event.getEntity();
-        ItemStack item = event.getItem().getItemStack();
-
-        // Check if picked up item is MobLog and prevent pickup
-        if (isMobLogItem(item)) {
-            event.setCancelled(true);
-
-            // Remove the item from ground
-            event.getItem().remove();
-
-            player.sendMessage(ChatColor.RED + "Nie możesz podnieść łopaty MobLog!");
-            player.sendMessage(ChatColor.GRAY + "Użyj /blazekill logitem aby otrzymać nową");
-        }
-    }
-
     // Log cleanup and teleport functions
     private void startLogCleanupTask() {
         // Run cleanup task every 24 hours (20 ticks * 60 seconds * 60 minutes * 24 hours)
@@ -999,6 +988,9 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
         // Clean up mob spawn info
         cleanupMobSpawnInfo(cutoffDate);
+
+        // Clean up mob nametags
+        cleanupMobNametags(cutoffDate);
 
         getLogger().info("Log cleanup completed - removed entries older than 21 days");
     }
@@ -1183,4 +1175,121 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         }
     }
 
+    // Mob nametag management methods
+    private void saveMobNametags() {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(mobNametagsFile))) {
+            for (Map.Entry<UUID, NametagInfo> entry : mobNametags.entrySet()) {
+                writer.println(entry.getKey().toString() + ";" + entry.getValue().toString());
+            }
+        } catch (IOException e) {
+            getLogger().severe("Error saving mob nametags: " + e.getMessage());
+        }
+    }
+
+    private void loadMobNametags() {
+        mobNametags.clear();
+
+        if (!mobNametagsFile.exists()) {
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(mobNametagsFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                try {
+                    String[] parts = line.split(";", 2);
+                    if (parts.length == 2) {
+                        UUID mobUuid = UUID.fromString(parts[0]);
+                        NametagInfo nametagInfo = NametagInfo.fromString(parts[1]);
+                        if (nametagInfo != null) {
+                            mobNametags.put(mobUuid, nametagInfo);
+                        }
+                    }
+                } catch (Exception e) {
+                    getLogger().warning("Could not parse mob nametag info: " + line);
+                }
+            }
+        } catch (IOException e) {
+            getLogger().severe("Error loading mob nametags: " + e.getMessage());
+        }
+    }
+
+    private void cleanupMobNametags(LocalDateTime cutoffDate) {
+        try {
+            Map<UUID, NametagInfo> filteredNametags = new HashMap<>();
+
+            for (Map.Entry<UUID, NametagInfo> entry : mobNametags.entrySet()) {
+                try {
+                    LocalDateTime giveTime = LocalDateTime.parse(entry.getValue().getGiveTime(), dateFormat);
+                    if (giveTime.isAfter(cutoffDate)) {
+                        filteredNametags.put(entry.getKey(), entry.getValue());
+                    }
+                } catch (Exception e) {
+                    // Keep entries with invalid dates
+                    filteredNametags.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            int removedCount = mobNametags.size() - filteredNametags.size();
+            mobNametags.clear();
+            mobNametags.putAll(filteredNametags);
+
+            // Save cleaned up data
+            saveMobNametags();
+
+            getLogger().info("Cleaned up " + removedCount + " old mob nametag records");
+        } catch (Exception e) {
+            getLogger().severe("Error during mob nametag cleanup: " + e.getMessage());
+        }
+    }
+
+}
+
+// NametagInfo class
+class NametagInfo {
+
+    private final String giverName;
+    private final String giverUuid;
+    private final String nametagText;
+    private final String giveTime;
+
+    public NametagInfo(String giverName, String giverUuid, String nametagText, String giveTime) {
+        this.giverName = giverName;
+        this.giverUuid = giverUuid;
+        this.nametagText = nametagText;
+        this.giveTime = giveTime;
+    }
+
+    public String getGiverName() {
+        return giverName;
+    }
+
+    public String getGiverUuid() {
+        return giverUuid;
+    }
+
+    public String getNametagText() {
+        return nametagText;
+    }
+
+    public String getGiveTime() {
+        return giveTime;
+    }
+
+    @Override
+    public String toString() {
+        return giverName + "|" + giverUuid + "|" + nametagText + "|" + giveTime;
+    }
+
+    public static NametagInfo fromString(String str) {
+        try {
+            String[] parts = str.split("\\|", 4);
+            if (parts.length == 4) {
+                return new NametagInfo(parts[0], parts[1], parts[2], parts[3]);
+            }
+        } catch (Exception e) {
+            // Handle parsing errors
+        }
+        return null;
+    }
 }
