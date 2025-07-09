@@ -28,9 +28,13 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
@@ -49,10 +53,14 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     private File spawnHistoryFile;
     private File mobSpawnInfoFile;
     private File mobNametagsFile;
+    private File blockChangesFile;
     private DateTimeFormatter dateFormat;
     private final Map<UUID, Boolean> playerAlerts = new HashMap<>();
     private final Map<UUID, SpawnInfo> mobSpawnInfo = new HashMap<>();
     private final Map<UUID, NametagInfo> mobNametags = new HashMap<>();
+    private final Map<String, BlockChangeInfo> blockChanges = new HashMap<>();
+    private final Map<UUID, Location> firstPos = new HashMap<>();
+    private final Map<UUID, Location> secondPos = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -112,6 +120,16 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             }
         }
 
+        this.blockChangesFile = new File(dataFolder, "block_changes.txt");
+        if (!blockChangesFile.exists()) {
+            try {
+                blockChangesFile.createNewFile();
+            } catch (IOException e) {
+                getLogger().severe("Could not create block changes file!");
+                e.printStackTrace();
+            }
+        }
+
         // Load alerts configuration
         loadAlertsConfig();
 
@@ -120,6 +138,9 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
         // Load mob nametags from file
         loadMobNametags();
+
+        // Load block changes from file
+        loadBlockChanges();
 
         this.dateFormat = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
 
@@ -141,6 +162,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         saveAlertsConfig();
         saveMobSpawnInfo();
         saveMobNametags();
+        saveBlockChanges();
         getLogger().info("BlazeKillTracker has been disabled!");
     }
 
@@ -308,6 +330,8 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 return handleLastSpawnCommand(player);
             case "tp":
                 return handleTeleportCommand(player, args);
+            case "sprawdzbloki":
+                return handleCheckBlocksCommand(player);
             case "help":
                 showBlazeKillHelp(player);
                 return true;
@@ -326,6 +350,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         player.sendMessage(ChatColor.YELLOW + "/blazekill logitem" + ChatColor.WHITE + " - Daje łopatę MobLog do sprawdzania spawnu");
         player.sendMessage(ChatColor.YELLOW + "/blazekill lastspawn" + ChatColor.WHITE + " - Ostatnich 4 graczy którzy zespawnowali moby");
         player.sendMessage(ChatColor.YELLOW + "/blazekill tp <gracz>" + ChatColor.WHITE + " - Teleportuje do ostatniego spawnu gracza");
+        player.sendMessage(ChatColor.YELLOW + "/blazekill sprawdzbloki" + ChatColor.WHITE + " - Sprawdza zmiany bloków w zaznaczonym obszarze");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
@@ -417,12 +442,111 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         saveAlertsConfig();
     }
 
+    // Block tracking events
+    @EventHandler
+    public void onBlockPlace(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        Location location = event.getBlockPlaced().getLocation();
+        Material material = event.getBlockPlaced().getType();
+
+        // Only track important blocks
+        if (isImportantBlock(material)) {
+            String locationKey = locationToString(location);
+            LocalDateTime now = LocalDateTime.now();
+
+            BlockChangeInfo changeInfo = new BlockChangeInfo(
+                    player.getName(),
+                    player.getUniqueId().toString(),
+                    material.name(),
+                    "PLACED",
+                    now.format(dateFormat),
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    location.getWorld().getName()
+            );
+
+            blockChanges.put(locationKey, changeInfo);
+            saveBlockChanges();
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+        Location location = event.getBlock().getLocation();
+        Material material = event.getBlock().getType();
+
+        // Only track important blocks
+        if (isImportantBlock(material)) {
+            String locationKey = locationToString(location);
+            LocalDateTime now = LocalDateTime.now();
+
+            BlockChangeInfo changeInfo = new BlockChangeInfo(
+                    player.getName(),
+                    player.getUniqueId().toString(),
+                    material.name(),
+                    "BROKEN",
+                    now.format(dateFormat),
+                    location.getBlockX(),
+                    location.getBlockY(),
+                    location.getBlockZ(),
+                    location.getWorld().getName()
+            );
+
+            blockChanges.put(locationKey, changeInfo);
+            saveBlockChanges();
+        }
+    }
+
+    @EventHandler
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        ItemStack item = player.getInventory().getItemInMainHand();
+
+        // Check if player is holding MobLog item for area selection
+        if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()
+                && item.getItemMeta().getDisplayName().equals(ChatColor.GOLD + "MobLog")
+                && event.getClickedBlock() != null) {
+
+            Location clickedLocation = event.getClickedBlock().getLocation();
+
+            if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
+                // Set first position
+                firstPos.put(player.getUniqueId(), clickedLocation);
+                player.sendMessage(ChatColor.GREEN + "Pozycja 1 ustawiona: "
+                        + ChatColor.WHITE + clickedLocation.getBlockX() + ", "
+                        + clickedLocation.getBlockY() + ", " + clickedLocation.getBlockZ());
+                event.setCancelled(true);
+
+            } else if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+                // Check if this is MobLog on entity interaction (let that handler take care of it)
+                if (event.getClickedBlock().getState() != null) {
+                    // Set second position only if not clicking on an entity
+                    secondPos.put(player.getUniqueId(), clickedLocation);
+                    player.sendMessage(ChatColor.GREEN + "Pozycja 2 ustawiona: "
+                            + ChatColor.WHITE + clickedLocation.getBlockX() + ", "
+                            + clickedLocation.getBlockY() + ", " + clickedLocation.getBlockZ());
+
+                    // Show selection info if both positions are set
+                    if (firstPos.containsKey(player.getUniqueId())) {
+                        Location pos1 = firstPos.get(player.getUniqueId());
+                        Location pos2 = clickedLocation;
+                        int blocks = calculateSelectionSize(pos1, pos2);
+                        player.sendMessage(ChatColor.YELLOW + "Zaznaczono " + blocks + " bloków. Użyj /blazekill sprawdzbloki");
+                    }
+                    event.setCancelled(true);
+                }
+            }
+        }
+    }
+
     // Tab completion
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("blazekill")) {
             if (args.length == 1) {
-                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "help")
+                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "sprawdzbloki", "help")
                         .stream()
                         .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
@@ -979,6 +1103,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
     private void cleanupOldLogs() {
         LocalDateTime cutoffDate = LocalDateTime.now().minusDays(21);
+        LocalDateTime blockCutoffDate = LocalDateTime.now().minusDays(7); // Shorter for blocks
 
         // Clean up blaze kills
         cleanupBlazeKills(cutoffDate);
@@ -992,7 +1117,10 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         // Clean up mob nametags
         cleanupMobNametags(cutoffDate);
 
-        getLogger().info("Log cleanup completed - removed entries older than 21 days");
+        // Clean up block changes (7 days)
+        cleanupBlockChanges(blockCutoffDate);
+
+        getLogger().info("Log cleanup completed - removed entries older than 21 days (7 days for blocks)");
     }
 
     private void cleanupBlazeKills(LocalDateTime cutoffDate) {
@@ -1243,6 +1371,190 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         }
     }
 
+    private void cleanupBlockChanges(LocalDateTime cutoffDate) {
+        try {
+            Map<String, BlockChangeInfo> filteredChanges = new HashMap<>();
+
+            for (Map.Entry<String, BlockChangeInfo> entry : blockChanges.entrySet()) {
+                try {
+                    LocalDateTime changeTime = LocalDateTime.parse(entry.getValue().getChangeTime(), dateFormat);
+                    if (changeTime.isAfter(cutoffDate)) {
+                        filteredChanges.put(entry.getKey(), entry.getValue());
+                    }
+                } catch (Exception e) {
+                    // Keep entries with invalid dates
+                    filteredChanges.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            int removedCount = blockChanges.size() - filteredChanges.size();
+            blockChanges.clear();
+            blockChanges.putAll(filteredChanges);
+
+            // Save cleaned up data
+            saveBlockChanges();
+
+            getLogger().info("Cleaned up " + removedCount + " old block change records");
+        } catch (Exception e) {
+            getLogger().severe("Error during block change cleanup: " + e.getMessage());
+        }
+    }
+
+    // Block change tracking utility methods
+    private boolean isImportantBlock(Material material) {
+        switch (material) {
+            case TNT:
+            case RESPAWN_ANCHOR:
+            case LAVA:
+            case WATER:
+            case OBSIDIAN:
+            case BEDROCK:
+            case DIAMOND_BLOCK:
+            case EMERALD_BLOCK:
+            case GOLD_BLOCK:
+            case IRON_BLOCK:
+            case CHEST:
+            case ENDER_CHEST:
+            case SHULKER_BOX:
+            case BEACON:
+            case HOPPER:
+            case DISPENSER:
+            case DROPPER:
+            case PISTON:
+            case STICKY_PISTON:
+            case REDSTONE_BLOCK:
+            case COMMAND_BLOCK:
+            case CHAIN_COMMAND_BLOCK:
+            case REPEATING_COMMAND_BLOCK:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private String locationToString(Location location) {
+        return location.getWorld().getName() + "_" + location.getBlockX() + "_" + location.getBlockY() + "_" + location.getBlockZ();
+    }
+
+    private int calculateSelectionSize(Location pos1, Location pos2) {
+        int minX = Math.min(pos1.getBlockX(), pos2.getBlockX());
+        int maxX = Math.max(pos1.getBlockX(), pos2.getBlockX());
+        int minY = Math.min(pos1.getBlockY(), pos2.getBlockY());
+        int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
+        int minZ = Math.min(pos1.getBlockZ(), pos2.getBlockZ());
+        int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
+
+        return (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
+    }
+
+    private boolean handleCheckBlocksCommand(Player player) {
+        UUID playerId = player.getUniqueId();
+
+        if (!firstPos.containsKey(playerId) || !secondPos.containsKey(playerId)) {
+            player.sendMessage(ChatColor.RED + "Musisz najpierw zaznaczyć obszar łopatą MobLog!");
+            player.sendMessage(ChatColor.YELLOW + "Lewy klik - pozycja 1, prawy klik - pozycja 2");
+            return true;
+        }
+
+        Location pos1 = firstPos.get(playerId);
+        Location pos2 = secondPos.get(playerId);
+
+        if (!pos1.getWorld().equals(pos2.getWorld())) {
+            player.sendMessage(ChatColor.RED + "Obie pozycje muszą być w tym samym świecie!");
+            return true;
+        }
+
+        int minX = Math.min(pos1.getBlockX(), pos2.getBlockX());
+        int maxX = Math.max(pos1.getBlockX(), pos2.getBlockX());
+        int minY = Math.min(pos1.getBlockY(), pos2.getBlockY());
+        int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
+        int minZ = Math.min(pos1.getBlockZ(), pos2.getBlockZ());
+        int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
+
+        List<BlockChangeInfo> foundChanges = new ArrayList<>();
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    String locationKey = pos1.getWorld().getName() + "_" + x + "_" + y + "_" + z;
+                    if (blockChanges.containsKey(locationKey)) {
+                        foundChanges.add(blockChanges.get(locationKey));
+                    }
+                }
+            }
+        }
+
+        if (foundChanges.isEmpty()) {
+            player.sendMessage(ChatColor.YELLOW + "Nie znaleziono zmian bloków w zaznaczonym obszarze");
+            player.sendMessage(ChatColor.GRAY + "Obszar: " + (maxX - minX + 1) + "x" + (maxY - minY + 1) + "x" + (maxZ - minZ + 1) + " bloków");
+            return true;
+        }
+
+        player.sendMessage(ChatColor.GOLD + "=== Zmiany Bloków w Obszarze ===");
+        player.sendMessage(ChatColor.GRAY + "Znaleziono " + foundChanges.size() + " zmian:");
+
+        // Sort by timestamp (newest first)
+        foundChanges.sort((a, b) -> b.getChangeTime().compareTo(a.getChangeTime()));
+
+        int shown = 0;
+        for (BlockChangeInfo change : foundChanges) {
+            if (shown >= 15) { // Limit to 15 entries to avoid spam
+                player.sendMessage(ChatColor.GRAY + "... i " + (foundChanges.size() - shown) + " więcej");
+                break;
+            }
+
+            ChatColor actionColor = change.getAction().equals("PLACED") ? ChatColor.GREEN : ChatColor.RED;
+            String actionText = change.getAction().equals("PLACED") ? "postawił" : "zniszczył";
+
+            player.sendMessage(ChatColor.YELLOW + change.getPlayerName() + " "
+                    + actionColor + actionText + " "
+                    + ChatColor.AQUA + change.getBlockType()
+                    + ChatColor.WHITE + " (" + change.getX() + ", " + change.getY() + ", " + change.getZ() + ")"
+                    + ChatColor.GRAY + " - " + change.getChangeTime());
+
+            shown++;
+        }
+
+        return true;
+    }
+
+    private void saveBlockChanges() {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(blockChangesFile))) {
+            for (Map.Entry<String, BlockChangeInfo> entry : blockChanges.entrySet()) {
+                writer.println(entry.getKey() + ";" + entry.getValue().toString());
+            }
+        } catch (IOException e) {
+            getLogger().severe("Error saving block changes: " + e.getMessage());
+        }
+    }
+
+    private void loadBlockChanges() {
+        blockChanges.clear();
+
+        if (!blockChangesFile.exists()) {
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(blockChangesFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                try {
+                    String[] parts = line.split(";", 2);
+                    if (parts.length == 2) {
+                        String locationKey = parts[0];
+                        BlockChangeInfo changeInfo = BlockChangeInfo.fromString(parts[1]);
+                        if (changeInfo != null) {
+                            blockChanges.put(locationKey, changeInfo);
+                        }
+                    }
+                } catch (Exception e) {
+                    getLogger().warning("Could not parse block change info: " + line);
+                }
+            }
+        } catch (IOException e) {
+            getLogger().severe("Error loading block changes: " + e.getMessage());
+        }
+    }
 }
 
 // NametagInfo class
@@ -1286,6 +1598,94 @@ class NametagInfo {
             String[] parts = str.split("\\|", 4);
             if (parts.length == 4) {
                 return new NametagInfo(parts[0], parts[1], parts[2], parts[3]);
+            }
+        } catch (Exception e) {
+            // Handle parsing errors
+        }
+        return null;
+    }
+}
+
+// BlockChangeInfo class
+class BlockChangeInfo {
+
+    private final String playerName;
+    private final String playerUuid;
+    private final String blockType;
+    private final String action; // PLACED or BROKEN
+    private final String changeTime;
+    private final int x, y, z;
+    private final String world;
+
+    public BlockChangeInfo(String playerName, String playerUuid, String blockType, String action,
+            String changeTime, int x, int y, int z, String world) {
+        this.playerName = playerName;
+        this.playerUuid = playerUuid;
+        this.blockType = blockType;
+        this.action = action;
+        this.changeTime = changeTime;
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.world = world;
+    }
+
+    public String getPlayerName() {
+        return playerName;
+    }
+
+    public String getPlayerUuid() {
+        return playerUuid;
+    }
+
+    public String getBlockType() {
+        return blockType;
+    }
+
+    public String getAction() {
+        return action;
+    }
+
+    public String getChangeTime() {
+        return changeTime;
+    }
+
+    public int getX() {
+        return x;
+    }
+
+    public int getY() {
+        return y;
+    }
+
+    public int getZ() {
+        return z;
+    }
+
+    public String getWorld() {
+        return world;
+    }
+
+    @Override
+    public String toString() {
+        return playerName + "|" + playerUuid + "|" + blockType + "|" + action + "|" + changeTime + "|" + x + "|" + y + "|" + z + "|" + world;
+    }
+
+    public static BlockChangeInfo fromString(String str) {
+        try {
+            String[] parts = str.split("\\|", 9);
+            if (parts.length == 9) {
+                return new BlockChangeInfo(
+                        parts[0], // playerName
+                        parts[1], // playerUuid
+                        parts[2], // blockType
+                        parts[3], // action
+                        parts[4], // changeTime
+                        Integer.parseInt(parts[5]), // x
+                        Integer.parseInt(parts[6]), // y
+                        Integer.parseInt(parts[7]), // z
+                        parts[8] // world
+                );
             }
         } catch (Exception e) {
             // Handle parsing errors

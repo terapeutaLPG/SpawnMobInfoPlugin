@@ -15,8 +15,8 @@ commands:
     usage: /blazekillsreload
     permission: blazekilltracker.reload
   blazekill:
-    description: Toggle spawn egg alerts, view spawn history, get MobLog tool, view last spawns, teleport to player's last spawn
-    usage: /blazekill <active|deactive|hist|logitem|lastspawn|tp|help>
+    description: Toggle spawn egg alerts, view spawn history, get MobLog tool, view last spawns, teleport to player's last spawn, check block changes
+    usage: /blazekill <active|deactive|hist|logitem|lastspawn|tp|sprawdzbloki|help>
     permission: blazekilltracker.alerts
 
 permissions:
