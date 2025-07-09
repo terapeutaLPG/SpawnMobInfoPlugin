@@ -154,6 +154,9 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         // Start automatic log cleanup task (runs every 24 hours)
         startLogCleanupTask();
 
+        // Cleanup MobLog items from ground on server start
+        cleanupMobLogItemsFromGround();
+
         getLogger().info("BlazeKillTracker has been enabled!");
     }
 
@@ -1553,6 +1556,39 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             }
         } catch (IOException e) {
             getLogger().severe("Error loading block changes: " + e.getMessage());
+        }
+    }
+
+    // Cleanup MobLog items from ground on server start
+    private void cleanupMobLogItemsFromGround() {
+        for (org.bukkit.World world : getServer().getWorlds()) {
+            for (Entity entity : world.getEntities()) {
+                if (entity instanceof org.bukkit.entity.Item) {
+                    org.bukkit.entity.Item itemEntity = (org.bukkit.entity.Item) entity;
+                    ItemStack itemStack = itemEntity.getItemStack();
+
+                    if (itemStack != null && itemStack.hasItemMeta() && itemStack.getItemMeta().hasDisplayName()
+                            && itemStack.getItemMeta().getDisplayName().equals(ChatColor.GOLD + "MobLog")) {
+                        // Remove MobLog item from ground
+                        itemEntity.remove();
+                        getLogger().info("Removed MobLog item from ground at: " + itemEntity.getLocation());
+                    }
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerDropItem(org.bukkit.event.player.PlayerDropItemEvent event) {
+        ItemStack droppedItem = event.getItemDrop().getItemStack();
+
+        // Check if dropped item is MobLog
+        if (droppedItem != null && droppedItem.hasItemMeta() && droppedItem.getItemMeta().hasDisplayName()
+                && droppedItem.getItemMeta().getDisplayName().equals(ChatColor.GOLD + "MobLog")) {
+
+            // Remove the dropped MobLog item immediately
+            event.getItemDrop().remove();
+            event.getPlayer().sendMessage(ChatColor.YELLOW + "Łopata MobLog zniknęła po wyrzuceniu!");
         }
     }
 }
