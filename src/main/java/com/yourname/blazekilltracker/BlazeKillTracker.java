@@ -33,6 +33,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -447,6 +448,54 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public void onPlayerQuit(PlayerQuitEvent event) {
         // Save alerts configuration when player leaves
         saveAlertsConfig();
+    }
+
+    @EventHandler
+    public void onPlayerChat(AsyncPlayerChatEvent event) {
+        // Enhance chat with hover UUID display (without creating separate chat)
+        Player sender = event.getPlayer();
+        String message = event.getMessage();
+        String format = event.getFormat();
+
+        // Create enhanced message with hover UUID
+        String playerName = sender.getName();
+        UUID playerUUID = sender.getUniqueId();
+
+        // Create TextComponent for player name with hover UUID
+        TextComponent playerComponent = new TextComponent(playerName);
+        playerComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                new TextComponent[]{new TextComponent(ChatColor.GRAY + "UUID: " + ChatColor.WHITE + playerUUID.toString())}));
+
+        // Create the full message using the original format
+        String fullMessage = String.format(format, playerName, message);
+
+        // Cancel the original event to send our enhanced version
+        event.setCancelled(true);
+
+        // Send enhanced message to all recipients
+        for (Player recipient : event.getRecipients()) {
+            if (recipient.hasPermission("blazekilltracker.uidview")) {
+                // Send enhanced version with hover UUID
+                String beforeName = fullMessage.substring(0, fullMessage.indexOf(playerName));
+                String afterName = fullMessage.substring(fullMessage.indexOf(playerName) + playerName.length());
+
+                TextComponent beforeComponent = new TextComponent(beforeName);
+                TextComponent afterComponent = new TextComponent(afterName);
+
+                TextComponent finalMessage = new TextComponent();
+                finalMessage.addExtra(beforeComponent);
+                finalMessage.addExtra(playerComponent);
+                finalMessage.addExtra(afterComponent);
+
+                recipient.spigot().sendMessage(finalMessage);
+            } else {
+                // Send regular message without hover for users without permission
+                recipient.sendMessage(fullMessage);
+            }
+        }
+
+        // Also send to console
+        getServer().getConsoleSender().sendMessage(fullMessage);
     }
 
     // Block tracking events
