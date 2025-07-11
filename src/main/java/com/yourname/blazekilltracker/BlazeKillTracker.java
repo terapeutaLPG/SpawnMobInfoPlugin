@@ -33,6 +33,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -43,6 +44,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 
 public class BlazeKillTracker extends JavaPlugin implements Listener, TabCompleter {
@@ -1590,6 +1592,57 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             event.getItemDrop().remove();
             event.getPlayer().sendMessage(ChatColor.YELLOW + "Łopata MobLog zniknęła po wyrzuceniu!");
         }
+    }
+
+    @EventHandler
+    public void onPlayerChat(AsyncPlayerChatEvent event) {
+        String message = event.getMessage();
+        Player sender = event.getPlayer();
+
+        // Create enhanced message with clickable player names for viewers with permission
+        TextComponent enhancedMessage = createEnhancedChatMessage(sender, message);
+
+        // Create list of recipients with permission
+        List<Player> uuidViewers = new ArrayList<>();
+        for (Player recipient : event.getRecipients()) {
+            if (recipient.hasPermission("blazekilltracker.uidview")) {
+                uuidViewers.add(recipient);
+            }
+        }
+
+        // Remove UUID viewers from default recipients and send enhanced message
+        event.getRecipients().removeAll(uuidViewers);
+
+        // Send enhanced message to players with permission
+        for (Player viewer : uuidViewers) {
+            viewer.spigot().sendMessage(enhancedMessage);
+        }
+    }
+
+    private TextComponent createEnhancedChatMessage(Player sender, String message) {
+        // Create base message component
+        TextComponent playerNameComponent = new TextComponent(sender.getName());
+        playerNameComponent.setColor(net.md_5.bungee.api.ChatColor.YELLOW);
+
+        // Create hover text with UUID info
+        TextComponent hoverText = new TextComponent(
+                ChatColor.GOLD + "Nick: " + ChatColor.WHITE + sender.getName() + "\n"
+                + ChatColor.GOLD + "UUID: " + ChatColor.WHITE + sender.getUniqueId().toString() + "\n"
+                + ChatColor.GRAY + "Kliknij, aby skopiować UUID"
+        );
+
+        // Set hover event
+        playerNameComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new TextComponent[]{hoverText}));
+
+        // Set click event to copy UUID
+        playerNameComponent.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, sender.getUniqueId().toString()));
+
+        // Create full message
+        TextComponent fullMessage = new TextComponent("<");
+        fullMessage.addExtra(playerNameComponent);
+        fullMessage.addExtra(new TextComponent("> " + message));
+
+        return fullMessage;
     }
 }
 

@@ -1,6 +1,10 @@
 # BlazeKillTracker Plugin
 
-Plugin do Minecraft który śledzi kto zabija moby Blaze, zapisując nick gracza, lokalizację i czas. Dodatkowo śledzi spawny mobów przez spawn eggi, nametagi oraz zmiany bloków.
+Plugin do Minecraft który śledzi kto zabija - [SLEDZENIE_NAMETAGOW.md](SLEDZENIE_NAMETAGOW.md) - Dokumentacja śledzenia nametagów
+
+- [SLEDZENIE_BLOKOW.md](SLEDZENIE_BLOKOW.md) - Dokumentacja śledzenia bloków
+- [ZABEZPIECZENIE_MOBLOG.md](ZABEZPIECZENIE_MOBLOG.md) - Dokumentacja zabezpieczenia łopaty MobLog
+- [UUID_CZAT.md](UUID_CZAT.md) - Dokumentacja funkcji UUID w czaciey Blaze, zapisując nick gracza, lokalizację i czas. Dodatkowo śledzi spawny mobów przez spawn eggi, nametagi oraz zmiany bloków.
 
 ## Funkcje
 
@@ -20,6 +24,7 @@ Plugin do Minecraft który śledzi kto zabija moby Blaze, zapisując nick gracza
 - **Zaznaczanie terenu**: Możliwość zaznaczania obszaru łopatą MobLog
 - **Automatyczne czyszczenie**: Stare logi są automatycznie usuwane (21 dni, bloki 7 dni)
 - **Zabezpieczenie MobLog**: Łopata MobLog znika po wyrzuceniu i po restarcie serwera
+- **UUID w czacie**: Gracze z uprawnieniem mogą kliknąć nick w czacie aby zobaczyć UUID
 
 ## Komendy
 
@@ -55,6 +60,7 @@ Główna komenda pluginu z podkomendami:
 - `blazekilltracker.lastspawn` - Sprawdzanie ostatnich spawnów (domyślnie: wszyscy)
 - `blazekilltracker.teleport` - Teleportacja do spawnów (domyślnie: operatorzy)
 - `blazekilltracker.blockcheck` - Sprawdzanie zmian bloków (domyślnie: wszyscy)
+- `blazekilltracker.uidview` - Wyświetlanie UUID gracza w czacie (domyślnie: operatorzy)
 
 ## Pliki danych
 

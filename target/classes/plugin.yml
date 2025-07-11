@@ -29,3 +29,21 @@ permissions:
   blazekilltracker.alerts:
     description: Allows toggling spawn egg alerts for Blaze and Ghast
     default: op
+  blazekilltracker.history:
+    description: Allows viewing spawn history
+    default: true
+  blazekilltracker.moblog:
+    description: Allows using MobLog tool
+    default: true
+  blazekilltracker.lastspawn:
+    description: Allows viewing last spawns
+    default: true
+  blazekilltracker.teleport:
+    description: Allows teleporting to spawn locations
+    default: op
+  blazekilltracker.blockcheck:
+    description: Allows checking block changes
+    default: true
+  blazekilltracker.uidview:
+    description: Allows viewing player UUID by clicking on chat names
+    default: op
