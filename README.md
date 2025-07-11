@@ -24,7 +24,7 @@ Plugin do Minecraft który śledzi kto zabija - [SLEDZENIE_NAMETAGOW.md](SLEDZEN
 - **Zaznaczanie terenu**: Możliwość zaznaczania obszaru łopatą MobLog
 - **Automatyczne czyszczenie**: Stare logi są automatycznie usuwane (21 dni, bloki 7 dni)
 - **Zabezpieczenie MobLog**: Łopata MobLog znika po wyrzuceniu i po restarcie serwera
-- **UUID w czacie**: Gracze z uprawnieniem mogą kliknąć nick w czacie aby zobaczyć UUID
+- **UUID Command**: Komenda do wyświetlania UUID graczy z uprawnieniami
 
 ## Komendy
 
@@ -39,6 +39,7 @@ Główna komenda pluginu z podkomendami:
 - `/blazekill lastspawn` - Ostatni respawnowacze mobów
 - `/blazekill tp <gracz>` - Teleport do ostatniego spawnu gracza
 - `/blazekill sprawdzbloki` - Sprawdza zmiany bloków w zaznaczonym terenie
+- `/blazekill uuid <gracz>` - Pokazuje UUID gracza (dla uprzywilejowanych)
 - `/blazekill help` - Pomoc
 
 ### `/blazekills`
@@ -60,7 +61,7 @@ Główna komenda pluginu z podkomendami:
 - `blazekilltracker.lastspawn` - Sprawdzanie ostatnich spawnów (domyślnie: wszyscy)
 - `blazekilltracker.teleport` - Teleportacja do spawnów (domyślnie: operatorzy)
 - `blazekilltracker.blockcheck` - Sprawdzanie zmian bloków (domyślnie: wszyscy)
-- `blazekilltracker.uidview` - Wyświetlanie UUID gracza w czacie (domyślnie: operatorzy)
+- `blazekilltracker.uidview` - Wyświetlanie UUID graczy komendą (domyślnie: operatorzy)
 
 ## Pliki danych
 

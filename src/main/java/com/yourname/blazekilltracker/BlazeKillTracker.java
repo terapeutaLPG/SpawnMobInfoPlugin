@@ -33,7 +33,6 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -337,6 +336,8 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 return handleTeleportCommand(player, args);
             case "sprawdzbloki":
                 return handleCheckBlocksCommand(player);
+            case "uuid":
+                return handleUuidCommand(player, args);
             case "help":
                 showBlazeKillHelp(player);
                 return true;
@@ -356,6 +357,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         player.sendMessage(ChatColor.YELLOW + "/blazekill lastspawn" + ChatColor.WHITE + " - Ostatnich 4 graczy którzy zespawnowali moby");
         player.sendMessage(ChatColor.YELLOW + "/blazekill tp <gracz>" + ChatColor.WHITE + " - Teleportuje do ostatniego spawnu gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill sprawdzbloki" + ChatColor.WHITE + " - Sprawdza zmiany bloków w zaznaczonym obszarze");
+        player.sendMessage(ChatColor.YELLOW + "/blazekill uuid <gracz>" + ChatColor.WHITE + " - Pokazuje UUID gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
@@ -551,11 +553,11 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("blazekill")) {
             if (args.length == 1) {
-                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "sprawdzbloki", "help")
+                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "sprawdzbloki", "uuid", "help")
                         .stream()
                         .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
-            } else if (args.length == 2 && (args[0].equalsIgnoreCase("hist") || args[0].equalsIgnoreCase("tp"))) {
+            } else if (args.length == 2 && (args[0].equalsIgnoreCase("hist") || args[0].equalsIgnoreCase("tp") || args[0].equalsIgnoreCase("uuid"))) {
                 // Return list of online players for hist and tp commands
                 return getServer().getOnlinePlayers().stream()
                         .map(Player::getName)
@@ -923,6 +925,139 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             } catch (NumberFormatException e) {
                 return null;
             }
+        }
+    }
+
+    // NametagInfo class
+    static class NametagInfo {
+
+        private String giverName;
+        private String giverUuid;
+        private String nametagText;
+        private String giveTime;
+
+        public NametagInfo(String giverName, String giverUuid, String nametagText, String giveTime) {
+            this.giverName = giverName;
+            this.giverUuid = giverUuid;
+            this.nametagText = nametagText;
+            this.giveTime = giveTime;
+        }
+
+        public String getGiverName() {
+            return giverName;
+        }
+
+        public String getGiverUuid() {
+            return giverUuid;
+        }
+
+        public String getNametagText() {
+            return nametagText;
+        }
+
+        public String getGiveTime() {
+            return giveTime;
+        }
+
+        @Override
+        public String toString() {
+            return giverName + ";" + giverUuid + ";" + nametagText + ";" + giveTime;
+        }
+
+        public static NametagInfo fromString(String str) {
+            String[] parts = str.split(";");
+            if (parts.length == 4) {
+                return new NametagInfo(parts[0], parts[1], parts[2], parts[3]);
+            }
+            return null;
+        }
+    }
+
+    // BlockChangeInfo class
+    static class BlockChangeInfo {
+
+        private String playerName;
+        private String playerUuid;
+        private String blockType;
+        private String action;
+        private String changeTime;
+        private int x, y, z;
+        private String world;
+
+        public BlockChangeInfo(String playerName, String playerUuid, String blockType, String action,
+                String changeTime, int x, int y, int z, String world) {
+            this.playerName = playerName;
+            this.playerUuid = playerUuid;
+            this.blockType = blockType;
+            this.action = action;
+            this.changeTime = changeTime;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.world = world;
+        }
+
+        public String getPlayerName() {
+            return playerName;
+        }
+
+        public String getPlayerUuid() {
+            return playerUuid;
+        }
+
+        public String getBlockType() {
+            return blockType;
+        }
+
+        public String getAction() {
+            return action;
+        }
+
+        public String getChangeTime() {
+            return changeTime;
+        }
+
+        public int getX() {
+            return x;
+        }
+
+        public int getY() {
+            return y;
+        }
+
+        public int getZ() {
+            return z;
+        }
+
+        public String getWorld() {
+            return world;
+        }
+
+        @Override
+        public String toString() {
+            return playerName + ";" + playerUuid + ";" + blockType + ";" + action + ";" + changeTime + ";" + x + ";" + y + ";" + z + ";" + world;
+        }
+
+        public static BlockChangeInfo fromString(String str) {
+            String[] parts = str.split(";");
+            if (parts.length == 9) {
+                try {
+                    return new BlockChangeInfo(
+                            parts[0], // playerName
+                            parts[1], // playerUuid
+                            parts[2], // blockType
+                            parts[3], // action
+                            parts[4], // changeTime
+                            Integer.parseInt(parts[5]), // x
+                            Integer.parseInt(parts[6]), // y
+                            Integer.parseInt(parts[7]), // z
+                            parts[8] // world
+                    );
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
+            return null;
         }
     }
 
@@ -1594,191 +1729,113 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         }
     }
 
-    @EventHandler
-    public void onPlayerChat(AsyncPlayerChatEvent event) {
-        String message = event.getMessage();
-        Player sender = event.getPlayer();
-
-        // Create enhanced message with clickable player names for viewers with permission
-        TextComponent enhancedMessage = createEnhancedChatMessage(sender, message);
-
-        // Create list of recipients with permission
-        List<Player> uuidViewers = new ArrayList<>();
-        for (Player recipient : event.getRecipients()) {
-            if (recipient.hasPermission("blazekilltracker.uidview")) {
-                uuidViewers.add(recipient);
-            }
+    private boolean handleUuidCommand(Player player, String[] args) {
+        if (!player.hasPermission("blazekilltracker.uidview")) {
+            player.sendMessage(ChatColor.RED + "Nie masz uprawnień do wyświetlania UUID graczy!");
+            return true;
         }
 
-        // Remove UUID viewers from default recipients and send enhanced message
-        event.getRecipients().removeAll(uuidViewers);
-
-        // Send enhanced message to players with permission
-        for (Player viewer : uuidViewers) {
-            viewer.spigot().sendMessage(enhancedMessage);
+        if (args.length < 2) {
+            player.sendMessage(ChatColor.RED + "Użycie: /blazekill uuid <nick_gracza>");
+            player.sendMessage(ChatColor.GRAY + "Przykład: /blazekill uuid Steve");
+            return true;
         }
+
+        String targetPlayerName = args[1];
+
+        // First try to find online player
+        Player targetPlayer = getServer().getPlayer(targetPlayerName);
+
+        if (targetPlayer != null && targetPlayer.isOnline()) {
+            // Player is online - show UUID
+            player.sendMessage(ChatColor.GOLD + "=== UUID Info ===");
+            player.sendMessage(ChatColor.AQUA + "Nick: " + ChatColor.WHITE + targetPlayer.getName());
+            player.sendMessage(ChatColor.AQUA + "UUID: " + ChatColor.WHITE + targetPlayer.getUniqueId().toString());
+            player.sendMessage(ChatColor.AQUA + "Status: " + ChatColor.GREEN + "Online");
+
+            // Create clickable component for copying UUID
+            TextComponent copyComponent = new TextComponent(ChatColor.YELLOW + "[Kliknij aby skopiować UUID]");
+            copyComponent.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, targetPlayer.getUniqueId().toString()));
+            copyComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                    new TextComponent[]{new TextComponent(ChatColor.GREEN + "Kliknij aby skopiować UUID do schowka")}));
+
+            player.spigot().sendMessage(copyComponent);
+            return true;
+        }
+
+        // Player is not online - try to find in stored data
+        UUID foundUUID = findUUIDInStoredData(targetPlayerName);
+
+        if (foundUUID != null) {
+            player.sendMessage(ChatColor.GOLD + "=== UUID Info ===");
+            player.sendMessage(ChatColor.AQUA + "Nick: " + ChatColor.WHITE + targetPlayerName);
+            player.sendMessage(ChatColor.AQUA + "UUID: " + ChatColor.WHITE + foundUUID.toString());
+            player.sendMessage(ChatColor.AQUA + "Status: " + ChatColor.RED + "Offline");
+            player.sendMessage(ChatColor.GRAY + "Dane z historii serwera");
+
+            // Create clickable component for copying UUID
+            TextComponent copyComponent = new TextComponent(ChatColor.YELLOW + "[Kliknij aby skopiować UUID]");
+            copyComponent.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, foundUUID.toString()));
+            copyComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                    new TextComponent[]{new TextComponent(ChatColor.GREEN + "Kliknij aby skopiować UUID do schowka")}));
+
+            player.spigot().sendMessage(copyComponent);
+            return true;
+        }
+
+        // Player not found
+        player.sendMessage(ChatColor.RED + "Nie znaleziono gracza: " + targetPlayerName);
+        player.sendMessage(ChatColor.GRAY + "Gracz nie jest online ani nie ma go w historii serwera");
+        return true;
     }
 
-    private TextComponent createEnhancedChatMessage(Player sender, String message) {
-        // Create base message component
-        TextComponent playerNameComponent = new TextComponent(sender.getName());
-        playerNameComponent.setColor(net.md_5.bungee.api.ChatColor.YELLOW);
-
-        // Create hover text with UUID info
-        TextComponent hoverText = new TextComponent(
-                ChatColor.GOLD + "Nick: " + ChatColor.WHITE + sender.getName() + "\n"
-                + ChatColor.GOLD + "UUID: " + ChatColor.WHITE + sender.getUniqueId().toString() + "\n"
-                + ChatColor.GRAY + "Kliknij, aby skopiować UUID"
-        );
-
-        // Set hover event
-        playerNameComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new TextComponent[]{hoverText}));
-
-        // Set click event to copy UUID
-        playerNameComponent.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, sender.getUniqueId().toString()));
-
-        // Create full message
-        TextComponent fullMessage = new TextComponent("<");
-        fullMessage.addExtra(playerNameComponent);
-        fullMessage.addExtra(new TextComponent("> " + message));
-
-        return fullMessage;
-    }
-}
-
-// NametagInfo class
-class NametagInfo {
-
-    private final String giverName;
-    private final String giverUuid;
-    private final String nametagText;
-    private final String giveTime;
-
-    public NametagInfo(String giverName, String giverUuid, String nametagText, String giveTime) {
-        this.giverName = giverName;
-        this.giverUuid = giverUuid;
-        this.nametagText = nametagText;
-        this.giveTime = giveTime;
-    }
-
-    public String getGiverName() {
-        return giverName;
-    }
-
-    public String getGiverUuid() {
-        return giverUuid;
-    }
-
-    public String getNametagText() {
-        return nametagText;
-    }
-
-    public String getGiveTime() {
-        return giveTime;
-    }
-
-    @Override
-    public String toString() {
-        return giverName + "|" + giverUuid + "|" + nametagText + "|" + giveTime;
-    }
-
-    public static NametagInfo fromString(String str) {
+    private UUID findUUIDInStoredData(String playerName) {
+        // Search in spawn history
         try {
-            String[] parts = str.split("\\|", 4);
-            if (parts.length == 4) {
-                return new NametagInfo(parts[0], parts[1], parts[2], parts[3]);
+            List<SpawnRecord> spawnRecords = loadSpawnRecords();
+            for (SpawnRecord record : spawnRecords) {
+                if (record.getPlayerName().equalsIgnoreCase(playerName)) {
+                    return UUID.fromString(record.getPlayerUuid());
+                }
             }
         } catch (Exception e) {
-            // Handle parsing errors
+            // Ignore errors, continue searching
         }
-        return null;
-    }
-}
 
-// BlockChangeInfo class
-class BlockChangeInfo {
-
-    private final String playerName;
-    private final String playerUuid;
-    private final String blockType;
-    private final String action; // PLACED or BROKEN
-    private final String changeTime;
-    private final int x, y, z;
-    private final String world;
-
-    public BlockChangeInfo(String playerName, String playerUuid, String blockType, String action,
-            String changeTime, int x, int y, int z, String world) {
-        this.playerName = playerName;
-        this.playerUuid = playerUuid;
-        this.blockType = blockType;
-        this.action = action;
-        this.changeTime = changeTime;
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        this.world = world;
-    }
-
-    public String getPlayerName() {
-        return playerName;
-    }
-
-    public String getPlayerUuid() {
-        return playerUuid;
-    }
-
-    public String getBlockType() {
-        return blockType;
-    }
-
-    public String getAction() {
-        return action;
-    }
-
-    public String getChangeTime() {
-        return changeTime;
-    }
-
-    public int getX() {
-        return x;
-    }
-
-    public int getY() {
-        return y;
-    }
-
-    public int getZ() {
-        return z;
-    }
-
-    public String getWorld() {
-        return world;
-    }
-
-    @Override
-    public String toString() {
-        return playerName + "|" + playerUuid + "|" + blockType + "|" + action + "|" + changeTime + "|" + x + "|" + y + "|" + z + "|" + world;
-    }
-
-    public static BlockChangeInfo fromString(String str) {
+        // Search in blaze kills
         try {
-            String[] parts = str.split("\\|", 9);
-            if (parts.length == 9) {
-                return new BlockChangeInfo(
-                        parts[0], // playerName
-                        parts[1], // playerUuid
-                        parts[2], // blockType
-                        parts[3], // action
-                        parts[4], // changeTime
-                        Integer.parseInt(parts[5]), // x
-                        Integer.parseInt(parts[6]), // y
-                        Integer.parseInt(parts[7]), // z
-                        parts[8] // world
-                );
+            List<BlazeKillRecord> killRecords = loadKillRecords();
+            for (BlazeKillRecord record : killRecords) {
+                if (record.getPlayerName().equalsIgnoreCase(playerName)) {
+                    return UUID.fromString(record.getPlayerUuid());
+                }
             }
         } catch (Exception e) {
-            // Handle parsing errors
+            // Ignore errors, continue searching
         }
-        return null;
+
+        // Search in mob spawn info
+        for (SpawnInfo spawnInfo : mobSpawnInfo.values()) {
+            if (spawnInfo.getSpawnerName().equalsIgnoreCase(playerName)) {
+                try {
+                    return UUID.fromString(spawnInfo.getSpawnerUuid());
+                } catch (Exception e) {
+                    // Ignore malformed UUIDs
+                }
+            }
+        }
+
+        // Search in mob nametags
+        for (NametagInfo nametagInfo : mobNametags.values()) {
+            if (nametagInfo.getGiverName().equalsIgnoreCase(playerName)) {
+                try {
+                    return UUID.fromString(nametagInfo.getGiverUuid());
+                } catch (Exception e) {
+                    // Ignore malformed UUIDs
+                }
+            }
+        }
+
+        return null; // Player not found
     }
 }
