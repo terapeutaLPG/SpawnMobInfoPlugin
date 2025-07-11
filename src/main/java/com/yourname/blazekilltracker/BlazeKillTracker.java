@@ -33,7 +33,6 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -42,10 +41,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
-
-import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.HoverEvent;
-import net.md_5.bungee.api.chat.TextComponent;
 
 public class BlazeKillTracker extends JavaPlugin implements Listener, TabCompleter {
 
@@ -337,8 +332,6 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 return handleTeleportCommand(player, args);
             case "sprawdzbloki":
                 return handleCheckBlocksCommand(player);
-            case "uuid":
-                return handleUuidCommand(player, args);
             case "help":
                 showBlazeKillHelp(player);
                 return true;
@@ -358,7 +351,6 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         player.sendMessage(ChatColor.YELLOW + "/blazekill lastspawn" + ChatColor.WHITE + " - Ostatnich 4 graczy którzy zespawnowali moby");
         player.sendMessage(ChatColor.YELLOW + "/blazekill tp <gracz>" + ChatColor.WHITE + " - Teleportuje do ostatniego spawnu gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill sprawdzbloki" + ChatColor.WHITE + " - Sprawdza zmiany bloków w zaznaczonym obszarze");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill uuid <gracz>" + ChatColor.WHITE + " - Pokazuje UUID gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
@@ -448,54 +440,6 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public void onPlayerQuit(PlayerQuitEvent event) {
         // Save alerts configuration when player leaves
         saveAlertsConfig();
-    }
-
-    @EventHandler
-    public void onPlayerChat(AsyncPlayerChatEvent event) {
-        // Enhance chat with hover UUID display (without creating separate chat)
-        Player sender = event.getPlayer();
-        String message = event.getMessage();
-        String format = event.getFormat();
-
-        // Create enhanced message with hover UUID
-        String playerName = sender.getName();
-        UUID playerUUID = sender.getUniqueId();
-
-        // Create TextComponent for player name with hover UUID
-        TextComponent playerComponent = new TextComponent(playerName);
-        playerComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                new TextComponent[]{new TextComponent(ChatColor.GRAY + "UUID: " + ChatColor.WHITE + playerUUID.toString())}));
-
-        // Create the full message using the original format
-        String fullMessage = String.format(format, playerName, message);
-
-        // Cancel the original event to send our enhanced version
-        event.setCancelled(true);
-
-        // Send enhanced message to all recipients
-        for (Player recipient : event.getRecipients()) {
-            if (recipient.hasPermission("blazekilltracker.uidview")) {
-                // Send enhanced version with hover UUID
-                String beforeName = fullMessage.substring(0, fullMessage.indexOf(playerName));
-                String afterName = fullMessage.substring(fullMessage.indexOf(playerName) + playerName.length());
-
-                TextComponent beforeComponent = new TextComponent(beforeName);
-                TextComponent afterComponent = new TextComponent(afterName);
-
-                TextComponent finalMessage = new TextComponent();
-                finalMessage.addExtra(beforeComponent);
-                finalMessage.addExtra(playerComponent);
-                finalMessage.addExtra(afterComponent);
-
-                recipient.spigot().sendMessage(finalMessage);
-            } else {
-                // Send regular message without hover for users without permission
-                recipient.sendMessage(fullMessage);
-            }
-        }
-
-        // Also send to console
-        getServer().getConsoleSender().sendMessage(fullMessage);
     }
 
     // Block tracking events
@@ -602,11 +546,11 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("blazekill")) {
             if (args.length == 1) {
-                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "sprawdzbloki", "uuid", "help")
+                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "sprawdzbloki", "help")
                         .stream()
                         .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
-            } else if (args.length == 2 && (args[0].equalsIgnoreCase("hist") || args[0].equalsIgnoreCase("tp") || args[0].equalsIgnoreCase("uuid"))) {
+            } else if (args.length == 2 && (args[0].equalsIgnoreCase("hist") || args[0].equalsIgnoreCase("tp"))) {
                 // Return list of online players for hist and tp commands
                 return getServer().getOnlinePlayers().stream()
                         .map(Player::getName)
@@ -638,18 +582,12 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         String message = ChatColor.RED + "[SPAWN ALERT] " + ChatColor.YELLOW + spawner.getName()
                 + ChatColor.WHITE + " zespawnował " + ChatColor.AQUA + mobName
                 + ChatColor.WHITE + " w " + ChatColor.GREEN + location.getWorld().getName()
-                + " (" + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ() + ")"
-                + ChatColor.GRAY + " - Kliknij aby się tp!";
-
-        // Create clickable message for teleport
-        TextComponent clickableMessage = new TextComponent(message);
-        clickableMessage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
-                "/tp " + location.getBlockX() + " " + location.getBlockY() + " " + location.getBlockZ()));
+                + " (" + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ() + ")";
 
         // Send to all operators with alerts enabled
         for (Player operator : getServer().getOnlinePlayers()) {
             if (playerAlerts.getOrDefault(operator.getUniqueId(), false)) {
-                operator.spigot().sendMessage(clickableMessage);
+                operator.sendMessage(message);
             }
         }
     }
@@ -1776,115 +1714,5 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             event.getItemDrop().remove();
             event.getPlayer().sendMessage(ChatColor.YELLOW + "Łopata MobLog zniknęła po wyrzuceniu!");
         }
-    }
-
-    private boolean handleUuidCommand(Player player, String[] args) {
-        if (!player.hasPermission("blazekilltracker.uidview")) {
-            player.sendMessage(ChatColor.RED + "Nie masz uprawnień do wyświetlania UUID graczy!");
-            return true;
-        }
-
-        if (args.length < 2) {
-            player.sendMessage(ChatColor.RED + "Użycie: /blazekill uuid <nick_gracza>");
-            player.sendMessage(ChatColor.GRAY + "Przykład: /blazekill uuid Steve");
-            return true;
-        }
-
-        String targetPlayerName = args[1];
-
-        // First try to find online player
-        Player targetPlayer = getServer().getPlayer(targetPlayerName);
-
-        if (targetPlayer != null && targetPlayer.isOnline()) {
-            // Player is online - show UUID
-            player.sendMessage(ChatColor.GOLD + "=== UUID Info ===");
-            player.sendMessage(ChatColor.AQUA + "Nick: " + ChatColor.WHITE + targetPlayer.getName());
-            player.sendMessage(ChatColor.AQUA + "UUID: " + ChatColor.WHITE + targetPlayer.getUniqueId().toString());
-            player.sendMessage(ChatColor.AQUA + "Status: " + ChatColor.GREEN + "Online");
-
-            // Create clickable component for copying UUID
-            TextComponent copyComponent = new TextComponent(ChatColor.YELLOW + "[Kliknij aby skopiować UUID]");
-            copyComponent.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, targetPlayer.getUniqueId().toString()));
-            copyComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new TextComponent[]{new TextComponent(ChatColor.GREEN + "Kliknij aby skopiować UUID do schowka")}));
-
-            player.spigot().sendMessage(copyComponent);
-            return true;
-        }
-
-        // Player is not online - try to find in stored data
-        UUID foundUUID = findUUIDInStoredData(targetPlayerName);
-
-        if (foundUUID != null) {
-            player.sendMessage(ChatColor.GOLD + "=== UUID Info ===");
-            player.sendMessage(ChatColor.AQUA + "Nick: " + ChatColor.WHITE + targetPlayerName);
-            player.sendMessage(ChatColor.AQUA + "UUID: " + ChatColor.WHITE + foundUUID.toString());
-            player.sendMessage(ChatColor.AQUA + "Status: " + ChatColor.RED + "Offline");
-            player.sendMessage(ChatColor.GRAY + "Dane z historii serwera");
-
-            // Create clickable component for copying UUID
-            TextComponent copyComponent = new TextComponent(ChatColor.YELLOW + "[Kliknij aby skopiować UUID]");
-            copyComponent.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, foundUUID.toString()));
-            copyComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new TextComponent[]{new TextComponent(ChatColor.GREEN + "Kliknij aby skopiować UUID do schowka")}));
-
-            player.spigot().sendMessage(copyComponent);
-            return true;
-        }
-
-        // Player not found
-        player.sendMessage(ChatColor.RED + "Nie znaleziono gracza: " + targetPlayerName);
-        player.sendMessage(ChatColor.GRAY + "Gracz nie jest online ani nie ma go w historii serwera");
-        return true;
-    }
-
-    private UUID findUUIDInStoredData(String playerName) {
-        // Search in spawn history
-        try {
-            List<SpawnRecord> spawnRecords = loadSpawnRecords();
-            for (SpawnRecord record : spawnRecords) {
-                if (record.getPlayerName().equalsIgnoreCase(playerName)) {
-                    return UUID.fromString(record.getPlayerUuid());
-                }
-            }
-        } catch (Exception e) {
-            // Ignore errors, continue searching
-        }
-
-        // Search in blaze kills
-        try {
-            List<BlazeKillRecord> killRecords = loadKillRecords();
-            for (BlazeKillRecord record : killRecords) {
-                if (record.getPlayerName().equalsIgnoreCase(playerName)) {
-                    return UUID.fromString(record.getPlayerUuid());
-                }
-            }
-        } catch (Exception e) {
-            // Ignore errors, continue searching
-        }
-
-        // Search in mob spawn info
-        for (SpawnInfo spawnInfo : mobSpawnInfo.values()) {
-            if (spawnInfo.getSpawnerName().equalsIgnoreCase(playerName)) {
-                try {
-                    return UUID.fromString(spawnInfo.getSpawnerUuid());
-                } catch (Exception e) {
-                    // Ignore malformed UUIDs
-                }
-            }
-        }
-
-        // Search in mob nametags
-        for (NametagInfo nametagInfo : mobNametags.values()) {
-            if (nametagInfo.getGiverName().equalsIgnoreCase(playerName)) {
-                try {
-                    return UUID.fromString(nametagInfo.getGiverUuid());
-                } catch (Exception e) {
-                    // Ignore malformed UUIDs
-                }
-            }
-        }
-
-        return null; // Player not found
     }
 }

@@ -44,6 +44,3 @@ permissions:
   blazekilltracker.blockcheck:
     description: Allows checking block changes
     default: true
-  blazekilltracker.uidview:
-    description: Allows viewing player UUID via command
-    default: op
