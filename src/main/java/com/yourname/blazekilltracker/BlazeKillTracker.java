@@ -1609,7 +1609,12 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 for (int z = minZ; z <= maxZ; z++) {
                     String locationKey = pos1.getWorld().getName() + "_" + x + "_" + y + "_" + z;
                     if (blockChanges.containsKey(locationKey)) {
-                        foundChanges.add(blockChanges.get(locationKey));
+                        BlockChangeInfo info = blockChanges.get(locationKey);
+                        // Dodajemy LAVA i WATER nawet jeśli nie są w isImportantBlock
+                        if (isImportantBlock(org.bukkit.Material.getMaterial(info.getBlockType()))
+                                || info.getBlockType().equals("LAVA") || info.getBlockType().equals("WATER")) {
+                            foundChanges.add(info);
+                        }
                     }
                 }
             }
