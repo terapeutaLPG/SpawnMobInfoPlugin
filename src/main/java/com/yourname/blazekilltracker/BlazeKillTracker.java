@@ -449,21 +449,15 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         Location location = event.getBlockPlaced().getLocation();
         Material material = event.getBlockPlaced().getType();
 
-        // Track important blocks and also LAVA/WATER placed by bucket
-        boolean isLavaOrWater = (material == Material.LAVA || material == Material.WATER);
-        boolean isBucket = player.getInventory().getItemInMainHand() != null && player.getInventory().getItemInMainHand().getType().toString().contains("BUCKET");
-        if (isImportantBlock(material) || isLavaOrWater) {
+        // Zapisuj KAŻDE postawienie bloku LAVA lub WATER jak każdy inny blok
+        if (isImportantBlock(material) || material == Material.LAVA || material == Material.WATER) {
             String locationKey = locationToString(location);
             LocalDateTime now = LocalDateTime.now();
-            String action = "PLACED";
-            if (isLavaOrWater && isBucket) {
-                action = "POURED";
-            }
             BlockChangeInfo changeInfo = new BlockChangeInfo(
                     player.getName(),
                     player.getUniqueId().toString(),
                     material.name(),
-                    action,
+                    "PLACED",
                     now.format(dateFormat),
                     location.getBlockX(),
                     location.getBlockY(),
