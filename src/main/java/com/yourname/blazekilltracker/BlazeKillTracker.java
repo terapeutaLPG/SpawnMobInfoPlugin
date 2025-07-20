@@ -343,14 +343,14 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
     private void showBlazeKillHelp(Player player) {
         player.sendMessage(ChatColor.GOLD + "=== BlazeKill Help ===");
-        player.sendMessage(ChatColor.AQUA + "Plugin by jaruso99");
+        player.sendMessage(ChatColor.AQUA + "Plugin by jaruso99 | Wersja 1.2");
         player.sendMessage(ChatColor.YELLOW + "/blazekill active" + ChatColor.WHITE + " - Włącza alerty o spawn eggs (Blaze + Ghast)");
         player.sendMessage(ChatColor.YELLOW + "/blazekill deactive" + ChatColor.WHITE + " - Wyłącza alerty o spawn eggs");
         player.sendMessage(ChatColor.YELLOW + "/blazekill hist <gracz>" + ChatColor.WHITE + " - Historia respawnów gracza");
         player.sendMessage(ChatColor.YELLOW + "/blazekill logitem" + ChatColor.WHITE + " - Daje łopatę MobLog do sprawdzania spawnu");
         player.sendMessage(ChatColor.YELLOW + "/blazekill lastspawn" + ChatColor.WHITE + " - Ostatnich 4 graczy którzy zespawnowali moby");
         player.sendMessage(ChatColor.YELLOW + "/blazekill tp <gracz>" + ChatColor.WHITE + " - Teleportuje do ostatniego spawnu gracza");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill sprawdzbloki" + ChatColor.WHITE + " - Sprawdza zmiany bloków w zaznaczonym obszarze");
+        player.sendMessage(ChatColor.YELLOW + "/blazekill sprawdzbloki" + ChatColor.WHITE + " - Sprawdza zmiany bloków w zaznaczonym obszarze, w tym wylaną lawę i wodę");
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
         player.sendMessage(ChatColor.GRAY + "Status: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
@@ -449,23 +449,27 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         Location location = event.getBlockPlaced().getLocation();
         Material material = event.getBlockPlaced().getType();
 
-        // Only track important blocks
-        if (isImportantBlock(material)) {
+        // Track important blocks and also LAVA/WATER placed by bucket
+        boolean isLavaOrWater = (material == Material.LAVA || material == Material.WATER);
+        boolean isBucket = player.getInventory().getItemInMainHand() != null && player.getInventory().getItemInMainHand().getType().toString().contains("BUCKET");
+        if (isImportantBlock(material) || isLavaOrWater) {
             String locationKey = locationToString(location);
             LocalDateTime now = LocalDateTime.now();
-
+            String action = "PLACED";
+            if (isLavaOrWater && isBucket) {
+                action = "POURED";
+            }
             BlockChangeInfo changeInfo = new BlockChangeInfo(
                     player.getName(),
                     player.getUniqueId().toString(),
                     material.name(),
-                    "PLACED",
+                    action,
                     now.format(dateFormat),
                     location.getBlockX(),
                     location.getBlockY(),
                     location.getBlockZ(),
                     location.getWorld().getName()
             );
-
             blockChanges.put(locationKey, changeInfo);
             saveBlockChanges();
         }
@@ -1629,16 +1633,23 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 player.sendMessage(ChatColor.GRAY + "... i " + (foundChanges.size() - shown) + " więcej");
                 break;
             }
-
-            ChatColor actionColor = change.getAction().equals("PLACED") ? ChatColor.GREEN : ChatColor.RED;
-            String actionText = change.getAction().equals("PLACED") ? "postawił" : "zniszczył";
-
+            ChatColor actionColor;
+            String actionText;
+            if (change.getAction().equals("PLACED")) {
+                actionColor = ChatColor.GREEN;
+                actionText = "postawił";
+            } else if (change.getAction().equals("POURED")) {
+                actionColor = ChatColor.BLUE;
+                actionText = "wylał";
+            } else {
+                actionColor = ChatColor.RED;
+                actionText = "zniszczył";
+            }
             player.sendMessage(ChatColor.YELLOW + change.getPlayerName() + " "
                     + actionColor + actionText + " "
                     + ChatColor.AQUA + change.getBlockType()
                     + ChatColor.WHITE + " (" + change.getX() + ", " + change.getY() + ", " + change.getZ() + ")"
                     + ChatColor.GRAY + " - " + change.getChangeTime());
-
             shown++;
         }
 

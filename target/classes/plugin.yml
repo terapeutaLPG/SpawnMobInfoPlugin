@@ -1,5 +1,5 @@
 name: BlazeKillTracker
-version: 1.0
+version: 1.2
 author: jaruso99
 main: com.yourname.blazekilltracker.BlazeKillTracker
 description: Plugin that tracks Blaze kills and alerts about Blaze/Ghast spawn eggs
