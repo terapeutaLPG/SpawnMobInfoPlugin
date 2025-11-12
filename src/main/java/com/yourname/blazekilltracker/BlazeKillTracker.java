@@ -58,6 +58,7 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     private final Map<String, BlockChangeInfo> blockChanges = new HashMap<>();
     private final Map<UUID, Location> firstPos = new HashMap<>();
     private final Map<UUID, Location> secondPos = new HashMap<>();
+    private final Map<String, Player> recentSpawnEggUsers = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -151,19 +152,37 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         // Start automatic log cleanup task (runs every 24 hours)
         startLogCleanupTask();
 
+        // Start auto-save task (runs every minute for real-time saving)
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                saveAllData();
+            }
+        }.runTaskTimerAsynchronously(this, 20L * 60, 20L * 60); // Every minute
+
         // Cleanup MobLog items from ground on server start
         cleanupMobLogItemsFromGround();
 
         getLogger().info("BlazeKillTracker has been enabled!");
+        getLogger().info("Auto-save enabled: data is saved every minute");
     }
 
     @Override
     public void onDisable() {
+        saveAllData(); // Save everything before disabling
+        getLogger().info("BlazeKillTracker has been disabled!");
+    }
+
+    /**
+     * Saves all plugin data immediately (called by auto-save task and when
+     * disabling)
+     */
+    private void saveAllData() {
         saveAlertsConfig();
         saveMobSpawnInfo();
         saveMobNametags();
         saveBlockChanges();
-        getLogger().info("BlazeKillTracker has been disabled!");
+        // Note: Blaze kills and spawn history are saved immediately when they occur
     }
 
     @EventHandler
@@ -221,8 +240,9 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     }
 
     private boolean handleBlazeKillsCommand(CommandSender sender, String[] args) {
-        if (!sender.hasPermission("blazekilltracker.view")) {
-            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+        if (!sender.hasPermission("blazekilltracker.view.stats")) {
+            sender.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
+            sender.sendMessage(ChatColor.GRAY + "Wymagane uprawnienie: " + ChatColor.WHITE + "blazekilltracker.view.stats");
             return true;
         }
 
@@ -280,14 +300,44 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     }
 
     private boolean handleReloadCommand(CommandSender sender) {
-        if (!sender.hasPermission("blazekilltracker.reload")) {
-            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+        if (!sender.hasPermission("blazekilltracker.admin.reload")) {
+            sender.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
+            sender.sendMessage(ChatColor.GRAY + "Wymagane uprawnienie: " + ChatColor.WHITE + "blazekilltracker.admin.reload");
             return true;
         }
 
-        // Reload configuration if needed
-        reloadConfig();
-        sender.sendMessage(ChatColor.GREEN + "BlazeKillTracker configuration reloaded!");
+        sender.sendMessage(ChatColor.YELLOW + "Przeładowywanie BlazeKillTracker...");
+
+        try {
+            // Save all current data before reloading
+            saveAllData();
+
+            // Clear all in-memory data
+            playerAlerts.clear();
+            mobSpawnInfo.clear();
+            mobNametags.clear();
+            blockChanges.clear();
+            firstPos.clear();
+            secondPos.clear();
+            recentSpawnEggUsers.clear();
+
+            // Reload configuration and data
+            reloadConfig();
+            loadAlertsConfig();
+            loadMobSpawnInfo();
+            loadMobNametags();
+            loadBlockChanges();
+
+            sender.sendMessage(ChatColor.GREEN + "BlazeKillTracker został pomyślnie przeładowany!");
+            getLogger().info("Plugin reloaded by " + sender.getName());
+
+        } catch (Exception e) {
+            sender.sendMessage(ChatColor.RED + "Błąd podczas przeładowywania pluginu!");
+            sender.sendMessage(ChatColor.RED + "Sprawdź konsolę serwera po szczegóły.");
+            getLogger().severe("Error during plugin reload: " + e.getMessage());
+            e.printStackTrace();
+        }
+
         return true;
     }
 
@@ -298,6 +348,13 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         }
 
         Player player = (Player) sender;
+
+        // Basic permission check - all blazekill commands require this
+        if (!player.hasPermission("blazekilltracker.use")) {
+            player.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
+            player.sendMessage(ChatColor.GRAY + "Wymagane uprawnienie: " + ChatColor.WHITE + "blazekilltracker.use");
+            return true;
+        }
 
         if (!player.hasPermission("blazekilltracker.alerts")) {
             player.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
@@ -313,14 +370,24 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
         switch (action) {
             case "active":
+                if (!player.hasPermission("blazekilltracker.alerts.toggle")) {
+                    player.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
+                    player.sendMessage(ChatColor.GRAY + "Wymagane uprawnienie: " + ChatColor.WHITE + "blazekilltracker.alerts.toggle");
+                    return true;
+                }
                 playerAlerts.put(player.getUniqueId(), true);
                 player.sendMessage(ChatColor.GREEN + "Alerty o spawn eggs zostały WŁĄCZONE!");
-                saveAlertsConfig();
+                saveAllData(); // Save immediately
                 return true;
             case "deactive":
+                if (!player.hasPermission("blazekilltracker.alerts.toggle")) {
+                    player.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
+                    player.sendMessage(ChatColor.GRAY + "Wymagane uprawnienie: " + ChatColor.WHITE + "blazekilltracker.alerts.toggle");
+                    return true;
+                }
                 playerAlerts.put(player.getUniqueId(), false);
                 player.sendMessage(ChatColor.RED + "Alerty o spawn eggs zostały WYŁĄCZONE!");
-                saveAlertsConfig();
+                saveAllData(); // Save immediately
                 return true;
             case "hist":
                 return handleSpawnHistoryCommand(player, args);
@@ -332,6 +399,10 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                 return handleTeleportCommand(player, args);
             case "sprawdzbloki":
                 return handleCheckBlocksCommand(player);
+            case "uuid":
+                return handleUUIDCommand(player, args);
+            case "reload":
+                return handleReloadCommand(player);
             case "help":
                 showBlazeKillHelp(player);
                 return true;
@@ -343,19 +414,43 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
     private void showBlazeKillHelp(Player player) {
         player.sendMessage(ChatColor.GOLD + "=== BlazeKill Help ===");
-        player.sendMessage(ChatColor.AQUA + "Plugin by jaruso99 | Wersja 1.2");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill active" + ChatColor.WHITE + " - Włącza alerty o spawn eggs (Blaze + Ghast)");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill deactive" + ChatColor.WHITE + " - Wyłącza alerty o spawn eggs");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill hist <gracz>" + ChatColor.WHITE + " - Historia respawnów gracza");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill logitem" + ChatColor.WHITE + " - Daje łopatę MobLog do sprawdzania spawnu");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill lastspawn" + ChatColor.WHITE + " - Ostatnich 4 graczy którzy zespawnowali moby");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill tp <gracz>" + ChatColor.WHITE + " - Teleportuje do ostatniego spawnu gracza");
-        player.sendMessage(ChatColor.YELLOW + "/blazekill sprawdzbloki" + ChatColor.WHITE + " - Sprawdza zmiany bloków w zaznaczonym obszarze, w tym wylaną lawę i wodę");
+        player.sendMessage(ChatColor.AQUA + "Plugin by jaruso99 | Wersja 1.3 | Auto-save enabled");
+
+        // Show commands based on permissions
+        if (player.hasPermission("blazekilltracker.alerts.toggle")) {
+            player.sendMessage(ChatColor.YELLOW + "/blazekill active" + ChatColor.WHITE + " - Włącza alerty o spawn eggs");
+            player.sendMessage(ChatColor.YELLOW + "/blazekill deactive" + ChatColor.WHITE + " - Wyłącza alerty o spawn eggs");
+        }
+        if (player.hasPermission("blazekilltracker.view.history")) {
+            player.sendMessage(ChatColor.YELLOW + "/blazekill hist <gracz>" + ChatColor.WHITE + " - Historia respawnów gracza");
+        }
+        if (player.hasPermission("blazekilltracker.tools.moblog")) {
+            player.sendMessage(ChatColor.YELLOW + "/blazekill logitem" + ChatColor.WHITE + " - Daje łopatę MobLog");
+        }
+        if (player.hasPermission("blazekilltracker.view.lastspawn")) {
+            player.sendMessage(ChatColor.YELLOW + "/blazekill lastspawn" + ChatColor.WHITE + " - Ostatnich 4 graczy którzy zespawnowali moby");
+        }
+        if (player.hasPermission("blazekilltracker.teleport")) {
+            player.sendMessage(ChatColor.YELLOW + "/blazekill tp <gracz>" + ChatColor.WHITE + " - Teleportuje do ostatniego spawnu gracza");
+        }
+        if (player.hasPermission("blazekilltracker.tools.blockcheck")) {
+            player.sendMessage(ChatColor.YELLOW + "/blazekill sprawdzbloki" + ChatColor.WHITE + " - Sprawdza zmiany bloków w obszarze");
+        }
+        if (player.hasPermission("blazekilltracker.admin.uuid")) {
+            player.sendMessage(ChatColor.YELLOW + "/blazekill uuid <gracz>" + ChatColor.WHITE + " - Pokazuje UUID gracza");
+        }
+        if (player.hasPermission("blazekilltracker.admin.reload")) {
+            player.sendMessage(ChatColor.YELLOW + "/blazekill reload" + ChatColor.WHITE + " - Przeładowuje plugin");
+        }
+
         player.sendMessage(ChatColor.YELLOW + "/blazekill help" + ChatColor.WHITE + " - Wyświetla tę pomoc");
-        player.sendMessage(ChatColor.GRAY + "Status: "
+
+        // Show status
+        player.sendMessage(ChatColor.GRAY + "Status alertów: "
                 + (playerAlerts.getOrDefault(player.getUniqueId(), false)
                 ? ChatColor.GREEN + "WŁĄCZONE" : ChatColor.RED + "WYŁĄCZONE"));
         player.sendMessage(ChatColor.GRAY + "Monitorowane moby: " + ChatColor.AQUA + "Blaze, Ghast");
+        player.sendMessage(ChatColor.GRAY + "Auto-save: " + ChatColor.GREEN + "Co minutę");
     }
 
     private List<BlazeKillRecord> loadKillRecords() throws IOException {
@@ -387,16 +482,23 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public void onCreatureSpawn(CreatureSpawnEvent event) {
         // Check if it's spawned by spawn egg (any mob type)
         if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.SPAWNER_EGG) {
-
             Location location = event.getLocation();
             LocalDateTime now = LocalDateTime.now();
+            String locationKey = location.getWorld().getName() + "_"
+                    + location.getBlockX() + "_" + location.getBlockY() + "_" + location.getBlockZ();
 
-            // Find nearby players (within 5 blocks) to determine who spawned it
-            Player spawner = null;
-            for (Player player : location.getWorld().getPlayers()) {
-                if (player.getLocation().distance(location) <= 5.0) {
-                    spawner = player;
-                    break;
+            // Look for recent spawn egg user at this location
+            Player spawner = recentSpawnEggUsers.get(locationKey);
+
+            if (spawner == null) {
+                // Fallback: Find nearby players (within 3 blocks) to determine who spawned it
+                double minDistance = Double.MAX_VALUE;
+                for (Player player : location.getWorld().getPlayers()) {
+                    double distance = player.getLocation().distance(location);
+                    if (distance <= 3.0 && distance < minDistance) {
+                        spawner = player;
+                        minDistance = distance;
+                    }
                 }
             }
 
@@ -423,6 +525,9 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
                     // Notify operators
                     notifyOperators(spawner, event.getEntityType().name(), location, now);
                 }
+
+                // Clean up the recent spawn egg usage record
+                recentSpawnEggUsers.remove(locationKey);
             }
         }
     }
@@ -502,6 +607,31 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         Player player = event.getPlayer();
         ItemStack item = player.getInventory().getItemInMainHand();
 
+        // Track spawn egg usage
+        if (item != null && item.getType().name().endsWith("_SPAWN_EGG")
+                && (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR)) {
+
+            // Get the location where the spawn egg will be used
+            Location targetLocation = null;
+            if (event.getClickedBlock() != null) {
+                targetLocation = event.getClickedBlock().getRelative(event.getBlockFace()).getLocation();
+            } else {
+                // Right click in air - use player's target location
+                targetLocation = player.getTargetBlock(null, 5).getLocation().add(0, 1, 0);
+            }
+
+            if (targetLocation != null) {
+                String locationKey = targetLocation.getWorld().getName() + "_"
+                        + targetLocation.getBlockX() + "_" + targetLocation.getBlockY() + "_" + targetLocation.getBlockZ();
+                recentSpawnEggUsers.put(locationKey, player);
+
+                // Schedule cleanup of this record after 5 seconds
+                getServer().getScheduler().runTaskLater(this, () -> {
+                    recentSpawnEggUsers.remove(locationKey);
+                }, 100L); // 5 seconds = 100 ticks
+            }
+        }
+
         // Check if player is holding MobLog item for area selection
         if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()
                 && item.getItemMeta().getDisplayName().equals(ChatColor.GOLD + "MobLog")
@@ -544,12 +674,13 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("blazekill")) {
             if (args.length == 1) {
-                return Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "sprawdzbloki", "help")
-                        .stream()
+                List<String> options = Arrays.asList("active", "deactive", "hist", "logitem", "lastspawn", "tp", "sprawdzbloki", "uuid", "reload", "help");
+                return options.stream()
                         .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
+                        .filter(s -> hasPermissionForCommand(sender, s))
                         .collect(Collectors.toList());
-            } else if (args.length == 2 && (args[0].equalsIgnoreCase("hist") || args[0].equalsIgnoreCase("tp"))) {
-                // Return list of online players for hist and tp commands
+            } else if (args.length == 2 && (args[0].equalsIgnoreCase("hist") || args[0].equalsIgnoreCase("tp") || args[0].equalsIgnoreCase("uuid"))) {
+                // Return list of online players for hist, tp and uuid commands
                 return getServer().getOnlinePlayers().stream()
                         .map(Player::getName)
                         .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
@@ -565,6 +696,32 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
             }
         }
         return new ArrayList<>();
+    }
+
+    private boolean hasPermissionForCommand(CommandSender sender, String command) {
+        switch (command) {
+            case "active":
+            case "deactive":
+                return sender.hasPermission("blazekilltracker.alerts.toggle");
+            case "hist":
+                return sender.hasPermission("blazekilltracker.view.history");
+            case "logitem":
+                return sender.hasPermission("blazekilltracker.tools.moblog");
+            case "lastspawn":
+                return sender.hasPermission("blazekilltracker.view.lastspawn");
+            case "tp":
+                return sender.hasPermission("blazekilltracker.teleport");
+            case "sprawdzbloki":
+                return sender.hasPermission("blazekilltracker.tools.blockcheck");
+            case "uuid":
+                return sender.hasPermission("blazekilltracker.admin.uuid");
+            case "reload":
+                return sender.hasPermission("blazekilltracker.admin.reload");
+            case "help":
+                return sender.hasPermission("blazekilltracker.use");
+            default:
+                return false;
+        }
     }
 
     // Utility methods
@@ -622,6 +779,12 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
     // Spawn history methods
     private boolean handleSpawnHistoryCommand(Player player, String[] args) {
+        if (!player.hasPermission("blazekilltracker.view.history")) {
+            player.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
+            player.sendMessage(ChatColor.GRAY + "Wymagane uprawnienie: " + ChatColor.WHITE + "blazekilltracker.view.history");
+            return true;
+        }
+
         if (args.length < 2) {
             player.sendMessage(ChatColor.RED + "Użycie: /blazekill hist <gracz>");
             return true;
@@ -658,6 +821,70 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
         }
 
         return true;
+    }
+
+    private boolean handleUUIDCommand(Player player, String[] args) {
+        if (!player.hasPermission("blazekilltracker.admin.uuid")) {
+            player.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
+            player.sendMessage(ChatColor.GRAY + "Wymagane uprawnienie: " + ChatColor.WHITE + "blazekilltracker.admin.uuid");
+            return true;
+        }
+
+        if (args.length < 2) {
+            player.sendMessage(ChatColor.RED + "Użycie: /blazekill uuid <gracz>");
+            return true;
+        }
+
+        String targetPlayerName = args[1];
+        Player targetPlayer = getServer().getPlayer(targetPlayerName);
+
+        if (targetPlayer != null) {
+            // Player is online
+            player.sendMessage(ChatColor.GOLD + "=== UUID Info dla " + targetPlayerName + " ===");
+            player.sendMessage(ChatColor.AQUA + "Nick: " + ChatColor.WHITE + targetPlayer.getName());
+            player.sendMessage(ChatColor.AQUA + "UUID: " + ChatColor.WHITE + targetPlayer.getUniqueId().toString());
+            player.sendMessage(ChatColor.AQUA + "Status: " + ChatColor.GREEN + "ONLINE");
+        } else {
+            // Try to find UUID from saved data
+            String foundUUID = findUUIDFromData(targetPlayerName);
+            if (foundUUID != null) {
+                player.sendMessage(ChatColor.GOLD + "=== UUID Info dla " + targetPlayerName + " ===");
+                player.sendMessage(ChatColor.AQUA + "Nick: " + ChatColor.WHITE + targetPlayerName);
+                player.sendMessage(ChatColor.AQUA + "UUID: " + ChatColor.WHITE + foundUUID);
+                player.sendMessage(ChatColor.AQUA + "Status: " + ChatColor.RED + "OFFLINE");
+                player.sendMessage(ChatColor.GRAY + "UUID znalezione w danych pluginu");
+            } else {
+                player.sendMessage(ChatColor.RED + "Nie znaleziono gracza: " + targetPlayerName);
+                player.sendMessage(ChatColor.GRAY + "Gracz musi być online lub mieć zapisane dane w pluginie");
+            }
+        }
+
+        return true;
+    }
+
+    private String findUUIDFromData(String playerName) {
+        // Search in mob spawn info
+        for (SpawnInfo info : mobSpawnInfo.values()) {
+            if (info.getSpawnerName().equalsIgnoreCase(playerName)) {
+                return info.getSpawnerUuid();
+            }
+        }
+
+        // Search in nametag data
+        for (NametagInfo info : mobNametags.values()) {
+            if (info.getGiverName().equalsIgnoreCase(playerName)) {
+                return info.getGiverUuid();
+            }
+        }
+
+        // Search in block changes
+        for (BlockChangeInfo info : blockChanges.values()) {
+            if (info.getPlayerName().equalsIgnoreCase(playerName)) {
+                return info.getPlayerUuid();
+            }
+        }
+
+        return null; // Not found
     }
 
     private boolean handleLastSpawnCommand(Player player) {
@@ -1048,6 +1275,12 @@ public class BlazeKillTracker extends JavaPlugin implements Listener, TabComplet
 
     // MobLog item methods
     private boolean handleLogItemCommand(Player player) {
+        if (!player.hasPermission("blazekilltracker.tools.moblog")) {
+            player.sendMessage(ChatColor.RED + "Nie masz uprawnień do używania tej komendy!");
+            player.sendMessage(ChatColor.GRAY + "Wymagane uprawnienie: " + ChatColor.WHITE + "blazekilltracker.tools.moblog");
+            return true;
+        }
+
         ItemStack logItem = createMobLogItem();
         player.getInventory().addItem(logItem);
         player.sendMessage(ChatColor.GREEN + "Otrzymałeś łopatę MobLog!");

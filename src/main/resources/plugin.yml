@@ -1,46 +1,125 @@
 name: BlazeKillTracker
-version: 1.2
+version: 1.3
 author: jaruso99
 main: com.yourname.blazekilltracker.BlazeKillTracker
-description: Plugin that tracks Blaze kills and alerts about Blaze/Ghast spawn eggs
+description: Plugin that tracks Blaze kills and alerts about Blaze/Ghast spawn eggs with real-time saving and comprehensive permissions
 api-version: 1.13
 
 commands:
   blazekills:
     description: View Blaze kill statistics
     usage: /blazekills [player]
-    permission: blazekilltracker.view
+    permission: blazekilltracker.view.stats
   blazekillsreload:
-    description: Reload plugin configuration
+    description: Reload plugin configuration (deprecated - use /blazekill reload)
     usage: /blazekillsreload
-    permission: blazekilltracker.reload
+    permission: blazekilltracker.admin.reload
   blazekill:
-    description: Toggle spawn egg alerts, view spawn history, get MobLog tool, view last spawns, teleport to player's last spawn, check block changes
-    usage: /blazekill <active|deactive|hist|logitem|lastspawn|tp|sprawdzbloki|help>
-    permission: blazekilltracker.alerts
+    description: Main plugin command with various subcommands
+    usage: /blazekill <active|deactive|hist|logitem|lastspawn|tp|sprawdzbloki|uuid|reload|help>
+    permission: blazekilltracker.use
 
 permissions:
-  blazekilltracker.view:
+  # Base permissions
+  blazekilltracker.*:
+    description: Gives access to all BlazeKillTracker features
+    default: false
+    children:
+      blazekilltracker.use: true
+      blazekilltracker.view.*: true
+      blazekilltracker.tools.*: true
+      blazekilltracker.admin.*: true
+      blazekilltracker.alerts.*: true
+      blazekilltracker.teleport: true
+
+  # Basic usage permission
+  blazekilltracker.use:
+    description: Basic permission required for all /blazekill commands
+    default: true
+
+  # View permissions
+  blazekilltracker.view.*:
+    description: All viewing permissions
+    default: false
+    children:
+      blazekilltracker.view.stats: true
+      blazekilltracker.view.history: true
+      blazekilltracker.view.lastspawn: true
+
+  blazekilltracker.view.stats:
     description: Allows viewing Blaze kill statistics
     default: true
-  blazekilltracker.reload:
-    description: Allows reloading plugin configuration
-    default: op
-  blazekilltracker.alerts:
-    description: Allows toggling spawn egg alerts for Blaze and Ghast
-    default: op
-  blazekilltracker.history:
-    description: Allows viewing spawn history
+
+  blazekilltracker.view.history:
+    description: Allows viewing spawn history of players
     default: true
-  blazekilltracker.moblog:
-    description: Allows using MobLog tool
-    default: true
-  blazekilltracker.lastspawn:
+
+  blazekilltracker.view.lastspawn:
     description: Allows viewing last spawns
     default: true
+
+  # Tools permissions
+  blazekilltracker.tools.*:
+    description: All tool-related permissions
+    default: false
+    children:
+      blazekilltracker.tools.moblog: true
+      blazekilltracker.tools.blockcheck: true
+
+  blazekilltracker.tools.moblog:
+    description: Allows using MobLog tool
+    default: true
+
+  blazekilltracker.tools.blockcheck:
+    description: Allows checking block changes
+    default: op
+
+  # Alert permissions
+  blazekilltracker.alerts.*:
+    description: All alert-related permissions
+    default: false
+    children:
+      blazekilltracker.alerts.toggle: true
+      blazekilltracker.alerts.receive: true
+
+  blazekilltracker.alerts.toggle:
+    description: Allows toggling spawn egg alerts for Blaze and Ghast
+    default: op
+
+  blazekilltracker.alerts.receive:
+    description: Allows receiving spawn egg alerts (automatic for ops)
+    default: op
+
+  # Teleport permission
   blazekilltracker.teleport:
     description: Allows teleporting to spawn locations
     default: op
-  blazekilltracker.blockcheck:
-    description: Allows checking block changes
+
+  # Admin permissions
+  blazekilltracker.admin.*:
+    description: All administrative permissions
+    default: false
+    children:
+      blazekilltracker.admin.reload: true
+      blazekilltracker.admin.uuid: true
+
+  blazekilltracker.admin.reload:
+    description: Allows reloading plugin configuration
+    default: op
+
+  blazekilltracker.admin.uuid:
+    description: Allows viewing player UUIDs
+    default: op
+
+  # Legacy permissions (for backward compatibility)
+  blazekilltracker.view:
+    description: Legacy permission - use blazekilltracker.view.stats instead
     default: true
+
+  blazekilltracker.reload:
+    description: Legacy permission - use blazekilltracker.admin.reload instead
+    default: op
+
+  blazekilltracker.alerts:
+    description: Legacy permission - use blazekilltracker.alerts.toggle instead
+    default: op
